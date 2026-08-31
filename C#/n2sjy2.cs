@@ -23,8 +23,20 @@ public class n2sjy2 : MonoBehaviour
     private void Start()
     {
         var (t1, t2) = ComputeTaus();
-        VectorList vectorList = JsonVectorParser.jsonpy("pyjson");
-        List<Vector3> points = vectorList.Vector3List;
+        var random = new System.Random();
+        List<float> fjValues = new List<float>();
+
+        for (int trial = 0; trial < 20; trial++)
+        {
+            // 1. 生成随机点集（单位球体内）
+
+            for (int i = 0; i < 200; i++)
+            {
+                Vector3 p = UnityEngine.Random.insideUnitSphere;
+                points.Add(p);
+            }
+
+        }
         rp = ComputeRp(points);
         float d2 = Mathf.Asin(Mathf.Cos(30 * Mathf.Deg2Rad) / Mathf.PI);
         a = rp * (1 + Mathf.Sin(d2));
@@ -42,6 +54,7 @@ public class n2sjy2 : MonoBehaviour
         var (f01, f02) = FitFociByProbability(points, probs01[0], F01, F02, a);
         Vector3 vj = (v + (F1 - F2)).normalized;
         var (t1_01, t2_01, F1_n, F2_n) = RefineModuliByAxis(points, t_, t_, vj, 50);
+        float angleDegv = Mathf.Acos(Mathf.Clamp(Vector3.Dot((F1-F2).normalized+v, v, -1f, 1f)) * Mathf.Rad2Deg;
         for (int i =0;i < 300; i++)
         {
             float[][] probsnew = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
@@ -49,8 +62,8 @@ public class n2sjy2 : MonoBehaviour
             var (f11, f22) = FitFociByProbability(points, probsnew[0], F1_new , F2_new, a);
             float angleDeg = Mathf.Acos(Mathf.Clamp(Vector3.Dot((F1_new - F2_new).normalized, v), -1f, 1f)) * Mathf.Rad2Deg;
             float angleDeg1 = Mathf.Acos(Mathf.Clamp(Vector3.Dot((F1_new - F2_new).normalized, (F1-F2).normalized), -1f, 1f)) * Mathf.Rad2Deg;
-            Debug.Log((angleDeg, angleDeg1));
-            if ((angleDeg + angleDeg1) * 0.5 - Math.Min(angleDeg,angleDeg1) <= 5 ) { break; }
+            Debug.Log((angleDeg, angleDeg1,angleDegv));
+            if((angleDeg + angleDeg1) * 0.5 - Math.Min(angleDeg,angleDeg1) <= 5 ) { break; }
            
             Vector3 axis = Vector3.Cross((F1_new - F2_new).normalized, (F1 - F2).normalized);
             Vector3 axis1 = Vector3.Cross((F1_new - F2_new).normalized, (F01 - F02).normalized);
@@ -65,6 +78,7 @@ public class n2sjy2 : MonoBehaviour
             f2 = F2z;
             Debug.Log((angleDeg_, angleDeg1_));
             Debug.Log((t1, t2));
+
         }
 
     }
