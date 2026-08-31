@@ -21,7 +21,8 @@ python/              研究与验证（可独立运行，无 Unity 依赖）
   fused_n2sjy2_nsjy4.py / combine_n2sjy2_nsjy4.py  融合方案
   analyze_relationship.py  各量关系分析
   experiments/       历史验证/实验脚本（一次性，归档保留）
-log/                 nsjy_pipeline_analysis.md 完整分析日志
+log/                 nsjy_pipeline_analysis.md 技术分析日志（数学本质/阶段结论/改进清单）
+                     ai_call_log.md            AI 调用与提示词日志（提示词、输入输出精简记录、改进映射）
 DLL.NET/             第三方依赖（MathNet.Numerics 等，仅 C# 侧使用）
 ```
 
