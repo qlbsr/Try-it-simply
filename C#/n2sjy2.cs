@@ -23,20 +23,8 @@ public class n2sjy2 : MonoBehaviour
     private void Start()
     {
         var (t1, t2) = ComputeTaus();
-        var random = new System.Random();
-        List<float> fjValues = new List<float>();
-
-        for (int trial = 0; trial < 20; trial++)
-        {
-            // 1. 生成随机点集（单位球体内）
-
-            for (int i = 0; i < 200; i++)
-            {
-                Vector3 p = UnityEngine.Random.insideUnitSphere;
-                points.Add(p);
-            }
-
-        }
+        VectorList vectorList = JsonVectorParser.jsonpy("pyjson");
+        points= vectorList.Vector3List;
         rp = ComputeRp(points);
         float d2 = Mathf.Asin(Mathf.Cos(30 * Mathf.Deg2Rad) / Mathf.PI);
         a = rp * (1 + Mathf.Sin(d2));
@@ -52,19 +40,18 @@ public class n2sjy2 : MonoBehaviour
         float[][] probs01 = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t_, t_, a);
         var (F01,F02) = ExtractFoci(points, probs01[1], probs01[3][1], probs01[2], probs01[3][2]);
         var (f01, f02) = FitFociByProbability(points, probs01[0], F01, F02, a);
-        Vector3 vj = (v + (F1 - F2)).normalized;
+        Vector3 vj = v.normalized + (F1 - F2).normalized;
         var (t1_01, t2_01, F1_n, F2_n) = RefineModuliByAxis(points, t_, t_, vj, 50);
-        float angleDegv = Mathf.Acos(Mathf.Clamp(Vector3.Dot((F1-F2).normalized+v, v, -1f, 1f)) * Mathf.Rad2Deg;
+        float angleDegv = Vector3.Angle(vj, v.normalized);
         for (int i =0;i < 300; i++)
         {
             float[][] probsnew = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
             var (t1_new, t2_new, F1_new, F2_new) = RefineModuliByAxis(points, t_, t_, (f1 - f2).normalized, 50);
-            var (f11, f22) = FitFociByProbability(points, probsnew[0], F1_new , F2_new, a);
-            float angleDeg = Mathf.Acos(Mathf.Clamp(Vector3.Dot((F1_new - F2_new).normalized, v), -1f, 1f)) * Mathf.Rad2Deg;
-            float angleDeg1 = Mathf.Acos(Mathf.Clamp(Vector3.Dot((F1_new - F2_new).normalized, (F1-F2).normalized), -1f, 1f)) * Mathf.Rad2Deg;
-            Debug.Log((angleDeg, angleDeg1,angleDegv));
-            if((angleDeg + angleDeg1) * 0.5 - Math.Min(angleDeg,angleDeg1) <= 5 ) { break; }
-           
+            // var (f11, f22) = FitFociByProbability(points, probsnew[0], F1_new , F2_new, a);
+            float angleDeg = Vector3.Angle((f1 - f2), v);
+            float angleDeg1 = Vector3.Angle((f1 - f2), (F1 - F2));
+            Debug.Log((angleDeg, angleDeg1, angleDegv));
+            if ((angleDeg + angleDeg1) * 0.5 - Math.Min(angleDeg, angleDeg1) <= 5) { break; }
             Vector3 axis = Vector3.Cross((F1_new - F2_new).normalized, (F1 - F2).normalized);
             Vector3 axis1 = Vector3.Cross((F1_new - F2_new).normalized, (F01 - F02).normalized);
             Quaternion rotation = Quaternion.AngleAxis(angleDeg * -1, axis);
@@ -78,6 +65,7 @@ public class n2sjy2 : MonoBehaviour
             f2 = F2z;
             Debug.Log((angleDeg_, angleDeg1_));
             Debug.Log((t1, t2));
+          
 
         }
 
@@ -122,8 +110,8 @@ public class n2sjy2 : MonoBehaviour
                 return 0f;
             }
             d.Normalize();
-            angleDeg = Mathf.Acos(Mathf.Clamp(Vector3.Dot(d, pcav), -1f, 1f)) * Mathf.Rad2Deg;
-            angleDeg1 = Mathf.Acos(Mathf.Clamp(Vector3.Dot(d, F1F2v), -1f, 1f)) * Mathf.Rad2Deg;
+            angleDeg = Vector3.Angle(d,pcav);
+            angleDeg1 = Vector3.Angle(d, F1F2v);
             return Mathf.Abs(angleDeg - angleDeg1);
         }
 
