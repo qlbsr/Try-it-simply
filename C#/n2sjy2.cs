@@ -42,7 +42,7 @@ public class n2sjy2 : MonoBehaviour
         var (f01, f02) = FitFociByProbability(points, probs01[0], F01, F02, a);
         Vector3 vj = v.normalized + (F1 - F2).normalized;
         var (t1_01, t2_01, F1_n, F2_n) = RefineModuliByAxis(points, t_, t_, vj, 50);
-        float angleDegv = Vector3.Angle(vj, v.normalized);
+        float angleDegv = Vector3.Angle(vj, v);
         for (int i =0;i < 300; i++)
         {
             float[][] probsnew = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
