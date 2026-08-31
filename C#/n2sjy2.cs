@@ -17,14 +17,15 @@ public class n2sjy2 : MonoBehaviour
     public Complex[] r74;
     public float rp;
     public float a;
- 
+    public Vector3 f1z;
+    public Vector3 f2z;
     public List<Vector3> points;//角平方线就是两个向量相加
    
     private void Start()
     {
         var (t1, t2) = ComputeTaus();
         VectorList vectorList = JsonVectorParser.jsonpy("pyjson");
-        points= vectorList.Vector3List;
+        points = vectorList.Vector3List;
         rp = ComputeRp(points);
         float d2 = Mathf.Asin(Mathf.Cos(30 * Mathf.Deg2Rad) / Mathf.PI);
         a = rp * (1 + Mathf.Sin(d2));
@@ -36,14 +37,18 @@ public class n2sjy2 : MonoBehaviour
         Vector3 v = pca(points);
         float[][] probs = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
         var (F1, F2) = ExtractFoci(points, probs[1], probs[3][1], probs[2], probs[3][2]);
+        Vector3 v1 = (F1 - F2).normalized;
         var (f1, f2) = FitFociByProbability(points, probs[0], F1, F2, a);
-        float[][] probs01 = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t_, t_, a);
+        Vector3 v2 = (f1 - f2).normalized;
+      float[][] probs01 = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t_, t_, a);
         var (F01,F02) = ExtractFoci(points, probs01[1], probs01[3][1], probs01[2], probs01[3][2]);
+        Vector3 v3 = (F01 - F02).normalized;
         var (f01, f02) = FitFociByProbability(points, probs01[0], F01, F02, a);
+        Vector3 v4 = (f01 - f02).normalized;
         Vector3 vj = v.normalized + (F1 - F2).normalized;
         var (t1_01, t2_01, F1_n, F2_n) = RefineModuliByAxis(points, t_, t_, vj, 50);
         float angleDegv = Vector3.Angle(vj, v);
-        for (int i =0;i < 300; i++)
+        for (int i =0;i < 50; i++)
         {
             float[][] probsnew = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
             var (t1_new, t2_new, F1_new, F2_new) = RefineModuliByAxis(points, t_, t_, (f1 - f2).normalized, 50);
@@ -51,7 +56,7 @@ public class n2sjy2 : MonoBehaviour
             float angleDeg = Vector3.Angle((f1 - f2), v);
             float angleDeg1 = Vector3.Angle((f1 - f2), (F1 - F2));
             Debug.Log((angleDeg, angleDeg1, angleDegv));
-            if ((angleDeg + angleDeg1) * 0.5 - Math.Min(angleDeg, angleDeg1) <= 5) { break; }
+            if ((angleDeg + angleDeg1) * 0.5 - Math.Min(angleDeg, angleDeg1) <= 8) { break; }
             Vector3 axis = Vector3.Cross((F1_new - F2_new).normalized, (F1 - F2).normalized);
             Vector3 axis1 = Vector3.Cross((F1_new - F2_new).normalized, (F01 - F02).normalized);
             Quaternion rotation = Quaternion.AngleAxis(angleDeg * -1, axis);
@@ -63,14 +68,45 @@ public class n2sjy2 : MonoBehaviour
             t2 = t2_;
             f1 = F1z;
             f2 = F2z;
+            this.f1z = f1;
+            this.f2z = f2;
             Debug.Log((angleDeg_, angleDeg1_));
             Debug.Log((t1, t2));
-          
-
         }
+        float[] s0 = BatchProbability(v*c, v*-c, points, a);
+        float[] s1 = BatchProbability(v1 * c, v1 * -c, points, a);
+        float[] s2 = BatchProbability(v2 * c, v2 * -c, points, a);
+        float[] s3 = BatchProbability(v3 * c, v3 * -c, points, a);
+        float[] s4 = BatchProbability(v4 * c, v4 * -c, points, a);
+        Vector3 v5 = (f1z - f2z).normalized;
+        float[] s5 = BatchProbability(v5 * c, v5 * -c, points, a);
+        Debug.Log((s0[0], s1[0], s2[0], s3[0], s4[0], s5[0]));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     }
-    
     /// <summary>
     /// 从当前 t1,t2 出发，使用 Nelder-Mead 直接最小化 |Δ|。
     /// 输入已预处理的数据，避免重复计算 rp, cone, a, r30, r45, v, d0。
@@ -442,10 +478,9 @@ public class n2sjy2 : MonoBehaviour
       int maxIter = 50,
       float angleTolDeg = 0.5f,
       float fdH = 1e-3f,        // 数值雅可比步长（按 τ 尺度）
-      float wDir = 20f,         // 方向闭合项权重（硬约束，优先保证闭合）
+      float wDir = 1f,         // 方向闭合项权重（硬约束，优先保证闭合）
       float wSelf = 1f,         // 概率自洽项权重
-      float wTheory = 1e-3f,
-       float wI = 1.0f ) // 理论正则权重（防止病态漂移）
+      float wTheory = 1e-3f) // 理论正则权重（防止病态漂移）
     {
         int n = pts.Count;
         if (n < 4) throw new ArgumentException("至少 4 个点");
@@ -475,7 +510,7 @@ public class n2sjy2 : MonoBehaviour
             {
                 dir.Normalize();
                 if (Vector3.Dot(dir, axis) < 0) dir = -dir;   // 只约束“直线方向”，忽略 ±
-                angleDeg = Mathf.Acos(Mathf.Clamp(Vector3.Dot(dir, axis), -1f, 1f)) * Mathf.Rad2Deg;
+                angleDeg = Vector3.Angle(dir, axis);
             }
           
             Debug.Log($"[iter {iter}] cost={cost:E3} angle={angleDeg:F3}°  t1=({x[0]:F4},{x[1]:F4}) t2=({x[2]:F4},{x[3]:F4})");
@@ -651,34 +686,52 @@ public class n2sjy2 : MonoBehaviour
         }
         return x;
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }
 public static class DeviationCalculator
 {
-    /// <summary>
-    /// 计算点集到由 tau1,tau2 生成的阿贝尔曲面的平均/最大距离。
-    /// </summary>
-    /// 
 
-    public static float[][] ComputeProbabilitiesFromTaus(Complex[] r30, Complex[] r45, Complex t1, Complex t2, float a)
+
+
+
+    /// <summary>
+    /// 软最小距离: softmin(z) = -γ·ln(Σ_λ exp(-|z-λ|/γ))，数值稳定形式
+    ///   = minDist - γ·ln(Σ exp(-(dist-minDist)/γ))。
+    /// γ 自适应: γ = gammaFraction × scale，
+    ///   scale 默认 = 最近两格点距离间隙 dists[1]-dists[0]（≈格点间距，
+    ///   即"点云到格点距离"的自然尺度；minDist≈0 时退化为格点间距，仍有效）；
+    ///   也可外部传入(如点云级 σ)覆盖。
+    ///   夹取到 [γFloor·scale, scale]：γ 过大 → softmin 退化为均值(梯度消失)；
+    ///   γ 过小 → exp 下溢/退化为硬 min(数值不稳定)。
+    /// </summary>
+    private static double SoftMinDistance(Complex z, List<Complex> lattice,
+                                          double gammaFraction = 0.1,
+                                          double scale = -1.0)
+    {
+        int n = lattice.Count;
+        double[] dists = new double[n];
+        double minDist = double.MaxValue;
+        for (int i = 0; i < n; i++)
+        {
+            double dist = (z - lattice[i]).Magnitude;
+            dists[i] = dist;
+            if (dist < minDist) minDist = dist;
+        }
+
+        // 尺度: 外部提供(点云级 σ) 或内部自适应(最近格点间隙 ≈ 格点间距)
+        if (scale <= 0)
+        {
+            Array.Sort(dists);
+            scale = (n > 1) ? Math.Max(dists[1] - dists[0], 1e-12) : 1e-12;
+        }
+
+        double gamma = Math.Max(1e-6 * scale,
+                                Math.Min(gammaFraction * scale, scale));
+        double sum = 0.0;
+        for (int i = 0; i < n; i++)
+            sum += Math.Exp(-(dists[i] - minDist) / gamma);
+        return minDist - gamma * Math.Log(sum);
+    }
+    public static float[][] ComputeProbabilitiesFromTaus(Complex[] r30, Complex[] r45, Complex t1, Complex t2, float a, bool useSoftMin = false)
     {
         // 生成两个一维椭圆曲线格
         var lattice1 = GenerateLattice1D(t1, 20);
@@ -689,10 +742,11 @@ public static class DeviationCalculator
         float[] d2Arr = new float[n];
 
         // 1. 计算每个点到各自格的最近距离
+        //    useSoftMin=true 时用自适应 γ 软最小距离 (连续可微, 缓解硬 min 的平台/梯度消失)
         for (int i = 0; i < n; i++)
         {
-            double d1 = NearestDistance(r30[i], lattice1);
-            double d2 = NearestDistance(r45[i], lattice2);
+            double d1 = useSoftMin ? SoftMinDistance(r30[i], lattice1) : NearestDistance(r30[i], lattice1);
+            double d2 = useSoftMin ? SoftMinDistance(r45[i], lattice2) : NearestDistance(r45[i], lattice2);
             d1Arr[i] = (float)d1;
             d2Arr[i] = (float)d2;
         }

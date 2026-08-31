@@ -448,22 +448,42 @@ public class nsjy : MonoBehaviour
         return (tau1, tau2);
     }
 
-    private static double SoftMinDistance(Complex z, List<Complex> lattice, double gamma = 0.1)
+    /// <summary>
+    /// 软最小距离: softmin(z) = -γ·ln(Σ_λ exp(-|z-λ|/γ))，数值稳定形式
+    ///   = minDist - γ·ln(Σ exp(-(dist-minDist)/γ))。
+    /// γ 自适应: γ = gammaFraction × scale，
+    ///   scale 默认 = 最近两格点距离间隙 dists[1]-dists[0]（≈格点间距，
+    ///   即"点云到格点距离"的自然尺度；minDist≈0 时退化为格点间距，仍有效）；
+    ///   也可外部传入(如点云级 σ)覆盖。
+    ///   夹取到 [γFloor·scale, scale]：γ 过大 → softmin 退化为均值(梯度消失)；
+    ///   γ 过小 → exp 下溢/退化为硬 min(数值不稳定)。
+    /// </summary>
+    private static double SoftMinDistance(Complex z, List<Complex> lattice,
+                                          double gammaFraction = 0.1,
+                                          double scale = -1.0)
     {
-        double sum = 0.0;
+        int n = lattice.Count;
+        double[] dists = new double[n];
         double minDist = double.MaxValue;
-        // 为数值稳定性，先找到硬最小
-        foreach (var lam in lattice)
+        for (int i = 0; i < n; i++)
         {
-            double dist = (z - lam).Magnitude;
+            double dist = (z - lattice[i]).Magnitude;
+            dists[i] = dist;
             if (dist < minDist) minDist = dist;
         }
 
-        foreach (var lam in lattice)
+        // 尺度: 外部提供(点云级 σ) 或内部自适应(最近格点间隙 ≈ 格点间距)
+        if (scale <= 0)
         {
-            double dist = (z - lam).Magnitude;
-            sum += Math.Exp(-(dist - minDist) / gamma);  // 减去 minDist 防止指数过大
+            Array.Sort(dists);
+            scale = (n > 1) ? Math.Max(dists[1] - dists[0], 1e-12) : 1e-12;
         }
+
+        double gamma = Math.Max(1e-6 * scale,
+                                Math.Min(gammaFraction * scale, scale));
+        double sum = 0.0;
+        for (int i = 0; i < n; i++)
+            sum += Math.Exp(-(dists[i] - minDist) / gamma);
         return minDist - gamma * Math.Log(sum);
     }
 
