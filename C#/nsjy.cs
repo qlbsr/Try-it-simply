@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using Unity.VisualScripting;
 using UnityEngine;
 using static alglib;
 using Vector3 = UnityEngine.Vector3;
@@ -51,6 +52,7 @@ public class nsjy : MonoBehaviour
         Complex K_inv_sqrt2 = gamma14 * gamma14 / (4.0 * Math.Sqrt(Math.PI));
         Complex K_sqrt2 = new Complex(1.0 / Math.Sqrt(2), -1.0 / Math.Sqrt(2)) * K_inv_sqrt2;
         var (t1, t2) = ComputeTaus();
+        Debug.Log((t1, t2));
         Complex t11 = new Complex(0, 1);
         Complex t22 = new Complex(0, 1);
         float[][] probs = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2,a);
@@ -63,7 +65,7 @@ public class nsjy : MonoBehaviour
         Vector3 v31 = (F11 - F22).normalized;
         Vector3 v3 = (F1 - F2).normalized;
         Vector3 v = pca(points);
-        Debug.Log((v,v31,v3));
+      
         Vector3 f1 = c* v;
         Vector3 f2 = -c * v;
        // Vector4 v4 = pca4(yzqx1);
@@ -75,23 +77,19 @@ public class nsjy : MonoBehaviour
         // 计算 K(kTarget)
         double sin16 = Mathf.Sin(16 * Mathf.Deg2Rad);
         Complex K_sin16 = Carlsonfk.K(1 / sin16);
+
         double sin74 = Mathf.Sin(74 * Mathf.Deg2Rad);
         Complex K_sin74 = Carlsonfk.K(1 / sin74);
         Complex aot = K_sqrt2 - K_2 - K_sin16;
         Complex aot2 = K_sin74 - K_2 - K_sqrt2;
         Complex KF2 = Carlsonfk.NK(aot2);
         Complex KF = Carlsonfk.NK(aot);
+        var (t1k, t2k) = n2sjy2.ComputeTaus(KF,KF2);
+       
+
       
        
-        float[] vs = BatchProbability(f1, f2, points, a);
-        float[] s1 = BatchProbability(F1,F2,points,a);
-        float[] s2 = BatchProbability(F11, F22,points,a);
-        var (f111, f222) = FitFociByProbability(points, probs[0], F1, F2, a);
-        Debug.Log(v3);
-        Debug.Log((f111 - f222).normalized);
-        float angleDeg2 = Mathf.Acos(Mathf.Clamp(Vector3.Dot(v3, (f111-f222).normalized), -1f, 1f)) * Mathf.Rad2Deg;
-        Debug.Log(angleDeg2);
-
+       
 
 
     }

@@ -23,7 +23,8 @@ public class n2sjy2 : MonoBehaviour
    
     private void Start()
     {
-        var (t1, t2) = ComputeTaus();
+        var (t1, t2) = ComputeTaus(2,Math.Sqrt(2));
+        Debug.Log((t1, t2));
         VectorList vectorList = JsonVectorParser.jsonpy("pyjson");
         points = vectorList.Vector3List;
         rp = ComputeRp(points);
@@ -70,8 +71,6 @@ public class n2sjy2 : MonoBehaviour
             f2 = F2z;
             this.f1z = f1;
             this.f2z = f2;
-            Debug.Log((angleDeg_, angleDeg1_));
-            Debug.Log((t1, t2));
         }
         float[] s0 = BatchProbability(v*c, v*-c, points, a);
         float[] s1 = BatchProbability(v1 * c, v1 * -c, points, a);
@@ -124,7 +123,7 @@ public class n2sjy2 : MonoBehaviour
     {
        
         double[] lb = { -0.5, 0.5, -0.5, 0.5 };
-        double[] ub = { 0.5, 1.5, 0.5, 1.5 };
+        double[] ub = { 0.5, 2, 0.5, 2};
         Vector3 F1z;
         Vector3 F2z;
 
@@ -213,18 +212,19 @@ public class n2sjy2 : MonoBehaviour
 
         return rp;
     }
-    public static (Complex tau1, Complex tau2) ComputeTaus()
+   
+    public static (Complex tau1, Complex tau2) ComputeTaus(Complex n1,Complex n2)
     {
-        Complex K2 = Carlsonfk.K(2.0); // K(2)
+        Complex K2 = Carlsonfk.K(n1); // K(2)
 
-        Complex Kprime2 = Carlsonfk.K(Complex.Sqrt(1 - 2.0 * 2.0)); // K(i√3)
+        Complex Kprime2 = Carlsonfk.K(Complex.Sqrt(1 - n1*n1)); // K(i√3)
 
         Complex tau1 = Complex.ImaginaryOne * Kprime2 / K2;
 
 
-        Complex Ksqrt2 = Carlsonfk.K(Math.Sqrt(2)); // K(√2)
+        Complex Ksqrt2 = Carlsonfk.K(n2); // K(√2)
 
-        Complex KprimeSqrt2 = Carlsonfk.K(Complex.Sqrt(1 - 2.0)); // K(i)
+        Complex KprimeSqrt2 = Carlsonfk.K(Complex.Sqrt(1 - n2*n2)); // K(i)
 
         Complex tau2 = Complex.ImaginaryOne * KprimeSqrt2 / Ksqrt2;
 
