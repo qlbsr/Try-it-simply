@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Security.Cryptography;
 using UnityEngine;
 using static alglib;
 using Quaternion = UnityEngine.Quaternion;
@@ -20,13 +21,22 @@ public class n2sjy2 : MonoBehaviour
     public Vector3 f1z;
     public Vector3 f2z;
     public List<Vector3> points;//角平方线就是两个向量相加
-   
+    public float[] s5;
     private void Start()
     {
         var (t1, t2) = ComputeTaus(2,Math.Sqrt(2));
         Debug.Log((t1, t2));
-        VectorList vectorList = JsonVectorParser.jsonpy("pyjson");
-        points = vectorList.Vector3List;
+        for (int trial = 0; trial < 1; trial++)
+        {
+            // 1. 生成随机点集（单位球体内）
+
+            for (int i = 0; i < 100; i++)
+            {
+                Vector3 p = UnityEngine.Random.insideUnitSphere;
+                points.Add(p);
+            }
+
+        }
         rp = ComputeRp(points);
         float d2 = Mathf.Asin(Mathf.Cos(30 * Mathf.Deg2Rad) / Mathf.PI);
         a = rp * (1 + Mathf.Sin(d2));
@@ -49,15 +59,26 @@ public class n2sjy2 : MonoBehaviour
         Vector3 vj = v.normalized + (F1 - F2).normalized;
         var (t1_01, t2_01, F1_n, F2_n) = RefineModuliByAxis(points, t_, t_, vj, 50);
         float angleDegv = Vector3.Angle(vj, v);
+        float[] s0 = BatchProbability(v * c, v * -c, points, a);
+        float[] s1 = BatchProbability(v1*c,v1*-c, points, a);
+        float[] s2 = BatchProbability(v2*c,v2*-c, points, a);
+        float[] s3 = BatchProbability(v3*c,v3*-c, points, a);
+        float[] s4 = BatchProbability(v4*c,v4*-c, points, a);
+        s5 = new float[s4.Length];
         for (int i =0;i < 50; i++)
         {
+            
             float[][] probsnew = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
             var (t1_new, t2_new, F1_new, F2_new) = RefineModuliByAxis(points, t_, t_, (f1 - f2).normalized, 50);
             // var (f11, f22) = FitFociByProbability(points, probsnew[0], F1_new , F2_new, a);
             float angleDeg = Vector3.Angle((f1 - f2), v);
-            float angleDeg1 = Vector3.Angle((f1 - f2), (F1 - F2));
-            Debug.Log((angleDeg, angleDeg1, angleDegv));
-            if ((angleDeg + angleDeg1) * 0.5 - Math.Min(angleDeg, angleDeg1) <= 8) { break; }
+            float angleDeg1 = Vector3.Angle((f1 - f2), (F1-F2));
+            float angleDeg2 = Vector3.Angle((f1 - f2), (F01 - F02));
+            float angleDeg3 = Vector3.Angle((F1 - F2), (F01 - F02));
+            Debug.Log((angleDeg, angleDeg1,angleDeg2,angleDeg3,angleDegv));
+            if ((angleDeg + angleDeg1) * 0.5 - Math.Min(angleDeg, angleDeg1) <= 8) { break; };
+            //if (Math.Abs((Math.Abs(s1[0]- s3[0])+ Math.Abs(s2[0] - s4[0]) + Math.Min(s4[0], s2[0])) - s5[0]) <= 0.001 ) { break; };
+
             Vector3 axis = Vector3.Cross((F1_new - F2_new).normalized, (F1 - F2).normalized);
             Vector3 axis1 = Vector3.Cross((F1_new - F2_new).normalized, (F01 - F02).normalized);
             Quaternion rotation = Quaternion.AngleAxis(angleDeg * -1, axis);
@@ -71,14 +92,10 @@ public class n2sjy2 : MonoBehaviour
             f2 = F2z;
             this.f1z = f1;
             this.f2z = f2;
+            Vector3 v5 = (f1z - f2z).normalized;
+            s5 = BatchProbability(v5*c,v5*-c, points, a);
+
         }
-        float[] s0 = BatchProbability(v*c, v*-c, points, a);
-        float[] s1 = BatchProbability(v1 * c, v1 * -c, points, a);
-        float[] s2 = BatchProbability(v2 * c, v2 * -c, points, a);
-        float[] s3 = BatchProbability(v3 * c, v3 * -c, points, a);
-        float[] s4 = BatchProbability(v4 * c, v4 * -c, points, a);
-        Vector3 v5 = (f1z - f2z).normalized;
-        float[] s5 = BatchProbability(v5 * c, v5 * -c, points, a);
         Debug.Log((s0[0], s1[0], s2[0], s3[0], s4[0], s5[0]));
 
 
