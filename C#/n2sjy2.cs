@@ -22,21 +22,23 @@ public class n2sjy2 : MonoBehaviour
     public Vector3 f2z;
     public List<Vector3> points;//角平方线就是两个向量相加
     public float[] s5;
+    public float fj5;
+    public float[][] probs12z;
     private void Start()
     {
         var (t1, t2) = ComputeTaus(2,Math.Sqrt(2));
-        Debug.Log((t1, t2));
         for (int trial = 0; trial < 1; trial++)
         {
             // 1. 生成随机点集（单位球体内）
 
-            for (int i = 0; i < 100; i++)
+            for (int i = 0; i < 200; i++)
             {
                 Vector3 p = UnityEngine.Random.insideUnitSphere;
                 points.Add(p);
             }
 
         }
+
         rp = ComputeRp(points);
         float d2 = Mathf.Asin(Mathf.Cos(30 * Mathf.Deg2Rad) / Mathf.PI);
         a = rp * (1 + Mathf.Sin(d2));
@@ -46,37 +48,64 @@ public class n2sjy2 : MonoBehaviour
         List<(Complex x, Complex y)> yzqx1 = yzqx(points, out r45, out r30, out r74, rp);
         Complex t_ = new Complex(0, 1);
         Vector3 v = pca(points);
-        float[][] probs = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
-        var (F1, F2) = ExtractFoci(points, probs[1], probs[3][1], probs[2], probs[3][2]);
+      
+        float[][] probs12 = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
+        var (F1, F2) = ExtractFoci(points, probs12[1], probs12[3][1], probs12[2], probs12[3][2]);
         Vector3 v1 = (F1 - F2).normalized;
-        var (f1, f2) = FitFociByProbability(points, probs[0], F1, F2, a);
+
+      
+
+
+        var (f1, f2) = FitFociByProbability(points, probs12[0], F1, F2, a);
         Vector3 v2 = (f1 - f2).normalized;
-      float[][] probs01 = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t_, t_, a);
-        var (F01,F02) = ExtractFoci(points, probs01[1], probs01[3][1], probs01[2], probs01[3][2]);
+        //float fj2 = Mathf.Atan2(v2.z, v2.x) * Mathf.Rad2Deg;
+        float[][] probs012 = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t_, t_, a);
+        var (F01,F02) = ExtractFoci(points, probs012[1], probs012[3][1], probs012[2], probs012[3][2]);
         Vector3 v3 = (F01 - F02).normalized;
-        var (f01, f02) = FitFociByProbability(points, probs01[0], F01, F02, a);
+       
+        var (f01, f02) = FitFociByProbability(points, probs012[0], F01, F02, a);
         Vector3 v4 = (f01 - f02).normalized;
+       
         Vector3 vj = v.normalized + (F1 - F2).normalized;
         var (t1_01, t2_01, F1_n, F2_n) = RefineModuliByAxis(points, t_, t_, vj, 50);
-        float angleDegv = Vector3.Angle(vj, v);
-        float[] s0 = BatchProbability(v * c, v * -c, points, a);
-        float[] s1 = BatchProbability(v1*c,v1*-c, points, a);
-        float[] s2 = BatchProbability(v2*c,v2*-c, points, a);
-        float[] s3 = BatchProbability(v3*c,v3*-c, points, a);
-        float[] s4 = BatchProbability(v4*c,v4*-c, points, a);
+      
+        float[] s0 = BatchProbability(v * c, v * -c, points, a);//pcav
+        float[] s1 = BatchProbability(v1*c,v1*-c, points, a);// F12
+        float[] s2 = BatchProbability(v2*c,v2*-c, points, a); // f12
+        float[] s3 = BatchProbability(v3*c,v3*-c, points, a); // F012
+        float[] s4 = BatchProbability(v4*c,v4*-c, points, a); // f012
+    
+       
+
+
+
         s5 = new float[s4.Length];
         for (int i =0;i < 50; i++)
         {
-            
-            float[][] probsnew = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
+
+            float[][] probnew = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
             var (t1_new, t2_new, F1_new, F2_new) = RefineModuliByAxis(points, t_, t_, (f1 - f2).normalized, 50);
             // var (f11, f22) = FitFociByProbability(points, probsnew[0], F1_new , F2_new, a);
             float angleDeg = Vector3.Angle((f1 - f2), v);
             float angleDeg1 = Vector3.Angle((f1 - f2), (F1-F2));
             float angleDeg2 = Vector3.Angle((f1 - f2), (F01 - F02));
-            float angleDeg3 = Vector3.Angle((F1 - F2), (F01 - F02));
-            Debug.Log((angleDeg, angleDeg1,angleDeg2,angleDeg3,angleDegv));
-            if ((angleDeg + angleDeg1) * 0.5 - Math.Min(angleDeg, angleDeg1) <= 8) { break; };
+            //float angleDeg3 = Vector3.Angle((F1 - F2), (F01 - F02));
+
+
+
+
+
+
+
+
+            Debug.Log((angleDeg, angleDeg1,angleDeg2));
+
+
+            
+
+            //if (Math.Abs(Math.Abs(fj) + Math.Abs(fj5) - 180) <= 10) { break; }
+           if (Math.Abs((angleDeg2 + angleDeg1) * 0.5 - Math.Min(angleDeg2, angleDeg1)) <= 8) { break; };//大于16
+           
             //if (Math.Abs((Math.Abs(s1[0]- s3[0])+ Math.Abs(s2[0] - s4[0]) + Math.Min(s4[0], s2[0])) - s5[0]) <= 0.001 ) { break; };
 
             Vector3 axis = Vector3.Cross((F1_new - F2_new).normalized, (F1 - F2).normalized);
@@ -93,10 +122,17 @@ public class n2sjy2 : MonoBehaviour
             this.f1z = f1;
             this.f2z = f2;
             Vector3 v5 = (f1z - f2z).normalized;
+             
+          
+          
             s5 = BatchProbability(v5*c,v5*-c, points, a);
-
+            probs12z = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
+            //if (Math.Abs(probs012[0][0] - probs12z[0][0]) <= 0.01) { break; };//a2 = a3
+           
         }
-        Debug.Log((s0[0], s1[0], s2[0], s3[0], s4[0], s5[0]));
+        Debug.Log((s0[0], s2[0], s4[0], s5[0]));//ff
+        Debug.Log((probs12[0][0], probs012[0][0], probs12z[0][0]));//tt
+       
 
 
 
