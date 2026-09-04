@@ -105,9 +105,8 @@ public class n2sjy2 : MonoBehaviour
 
             //if (Math.Abs(Math.Abs(fj) + Math.Abs(fj5) - 180) <= 10) { break; }
            if (Math.Abs((angleDeg2 + angleDeg1) * 0.5 - Math.Min(angleDeg2, angleDeg1)) <= 8) { break; };//大于16
-           
+            // if (Math.Abs((angleDeg + angleDeg1) * 0.5 - Math.Min(angleDeg, angleDeg1)) <= 8) { break; };
             //if (Math.Abs((Math.Abs(s1[0]- s3[0])+ Math.Abs(s2[0] - s4[0]) + Math.Min(s4[0], s2[0])) - s5[0]) <= 0.001 ) { break; };
-
             Vector3 axis = Vector3.Cross((F1_new - F2_new).normalized, (F1 - F2).normalized);
             Vector3 axis1 = Vector3.Cross((F1_new - F2_new).normalized, (F01 - F02).normalized);
             Quaternion rotation = Quaternion.AngleAxis(angleDeg * -1, axis);
