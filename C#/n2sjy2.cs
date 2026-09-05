@@ -38,7 +38,6 @@ public class n2sjy2 : MonoBehaviour
             }
 
         }
-
         rp = ComputeRp(points);
         float d2 = Mathf.Asin(Mathf.Cos(30 * Mathf.Deg2Rad) / Mathf.PI);
         a = rp * (1 + Mathf.Sin(d2));
@@ -101,12 +100,15 @@ public class n2sjy2 : MonoBehaviour
             Debug.Log((angleDeg, angleDeg1,angleDeg2));
 
 
-            
 
-           
-           //if (Math.Abs((angleDeg2 + angleDeg1) * 0.5 - Math.Min(angleDeg2, angleDeg1)) <= 8) { break; };//大于16 有效 #2
-           // if (Math.Abs((angleDeg + angleDeg1) * 0.5 - Math.Min(angleDeg, angleDeg1)) <= 8) { break; }; #1
-           
+
+            if (angleDeg1 >= 16 && angleDeg2 >= 16)
+            {
+                if (Math.Abs((angleDeg2 + angleDeg1) * 0.5 - Math.Min(angleDeg2, angleDeg1)) <= 8) { break; }
+                 ;//16 有效 #2}
+            }
+            //f (Math.Abs((angleDeg + angleDeg1) * 0.5 - Math.Min(angleDeg, angleDeg1)) <= 8) { break; };// #1
+
             Vector3 axis = Vector3.Cross((F1_new - F2_new).normalized, (F1 - F2).normalized);
             Vector3 axis1 = Vector3.Cross((F1_new - F2_new).normalized, (F01 - F02).normalized);
             Quaternion rotation = Quaternion.AngleAxis(angleDeg * -1, axis);
@@ -130,6 +132,12 @@ public class n2sjy2 : MonoBehaviour
             // 当#2有效时，s0[0] 可能和s5[0]很近
             
         }
+        Debug.Log((s0[0], s2[0], s4[0], s5[0]));
+        float min = Math.Min(s2[0], Math.Min(s4[0], s5[0]));
+        Debug.Log((s0[0], min));
+
+        
+
 
         Debug.Log((probs12[0][0], probs012[0][0], probs12z[0][0]));//tt
 
