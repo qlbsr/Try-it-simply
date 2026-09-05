@@ -121,19 +121,20 @@ public class n2sjy2 : MonoBehaviour
             this.f1z = f1;
             this.f2z = f2;
             Vector3 v5 = (f1z - f2z).normalized;
-             
-          
-          
+            float angleDegz = Vector3.Angle(v5, v);
+            Debug.Log(angleDegz);
+
             s5 = BatchProbability(v5*c,v5*-c, points, a);
             probs12z = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
             //if (Math.Abs(probs012[0][0] - probs12z[0][0]) <= 0.01) { break; };//a2 = a3
             // 当#2有效时，s0[0] 可能和s5[0]很近
             
         }
-        Debug.Log((s0[0], s2[0], s4[0], s5[0]));//ff
-        Debug.Log((probs12[0][0], probs012[0][0], probs12z[0][0]));//tt
-       
 
+        Debug.Log((probs12[0][0], probs012[0][0], probs12z[0][0]));//tt
+
+        Debug.Log($"[{string.Join(", ", s0.Select(v => v.ToString("F6")))}]");
+        Debug.Log($"[{string.Join(", ", s5.Select(v => v.ToString("F6")))}]");
 
 
 
