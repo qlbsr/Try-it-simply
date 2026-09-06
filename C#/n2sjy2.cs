@@ -24,18 +24,8 @@ public class n2sjy2 : MonoBehaviour
     private void Start()
     {
         var (t1, t2) = ComputeTaus(2,Math.Sqrt(2));
-        for (int trial = 0; trial < 1; trial++)
-        {
-            // 1. 生成随机点集（单位球体内）
-
-            for (int i = 0; i < 200; i++)
-            {
-                Vector3 p = UnityEngine.Random.insideUnitSphere;
-                points.Add(p);
-            }
-
-        }
-
+        VectorList vectorList = JsonVectorParser.jsonpy("pyjson");
+        points = vectorList.Vector3List;
         rp = ComputeRp(points);
         float d2 = Mathf.Asin(Mathf.Cos(30 * Mathf.Deg2Rad) / Mathf.PI);
         a = rp * (1 + Mathf.Sin(d2));
@@ -72,44 +62,26 @@ public class n2sjy2 : MonoBehaviour
 
 
        
-       
-        for (int i = 0; i < 100; i++)
+      
+        for (int i = 0; i < 80; i++)
         {
 
             float[][] probnew = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
-            var (t1_new, t2_new, F1_new, F2_new) = RefineModuliByAxis(points, t_, t_, (f1 - f2).normalized, 50);
+            var (t1_new, t2_new, F1_new, F2_new) = RefineModuliByAxis(points, t_, t_, (f1 - f2).normalized, 5);
             float[][] prob_new = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1_new, t2_new, a);
             var (f_1new, f_2new) = FitFociByProbability(points, prob_new[0], F1_new, F2_new, a);
             Vector3 v6 = (f_1new - f_2new).normalized;
-            
             float[] s6 = BatchProbability(v6 * c, v6 * -c, points, a);
-           
             float angleDeg5 = Vector3.Angle((v6), (v2));
             float angleDeg6 = Vector3.Angle((v6), (v4));
-            float angleDeg7 = Vector3.Angle((v2),(v4));
-          
             float angleDeg9  = Vector3.Angle((v6), v);
-           
-
-         
-          
-            Debug.Log((angleDeg5, angleDeg6, angleDeg9,angleDeg7));
-
-            //if (prob_new[0][0] > Math.Max(probs12[0][0], probs012[0][0])){ break; };
-            //if (angleDeg5 >=16) {
-               // if (Math.Abs((angleDeg5 + angleDeg7) * 0.5 - Math.Min(angleDeg5, angleDeg7)) <= 8 && s6[0] > 0) { break; }
-            //;//16 有效 #2
-            //}
-            //if (Math.Abs((angleDeg9 + angleDeg5) * 0.5 - Math.Min(angleDeg9, angleDeg5)) <= 8) { break; };// #1
+            Debug.Log((angleDeg9));
             Vector3 axis = Vector3.Cross(v6, v2).normalized; // 旋转轴
             Vector3 axis1 = Vector3.Cross(v6, v4).normalized;
             Quaternion rotation = Quaternion.AngleAxis(angleDeg5*-1, axis);
             Quaternion rotation1 = Quaternion.AngleAxis(angleDeg6*-1, axis1);
             Vector3 newf = rotation * v2;
             Vector3 newv = rotation1 * v4;
-
-
-
             var (t1_, t2_, deltaDeg, angleDeg_, angleDeg1_, evals, F1z, F2z) = RefineTausWithNM(t1_new, t2_new, points, r30, r45, a, newf, newv);
             t1 = t1_;
             t2 = t2_;
@@ -117,41 +89,7 @@ public class n2sjy2 : MonoBehaviour
             f2 = F2z;
             this.f1z = f1;
             this.f2z = f2;
-
-            //if (Math.Abs(probs012[0][0] - probs12z[0][0]) <= 0.01) { break; };//a2 = a3
-            // 当#2有效时，s0[0] 可能和s5[0]很近
-
         }
-        
-       
-      
-       
-       // Debug.Log($"[{string.Join(", ", s0.Select(v => v.ToString("F6")))}]");
-       // Debug.Log($"[{string.Join(", ", s5.Select(v => v.ToString("F6")))}]");
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     }
     /// <summary>
     /// 从当前 t1,t2 出发，使用 Nelder-Mead 直接最小化 |Δ|。
@@ -523,7 +461,7 @@ public class n2sjy2 : MonoBehaviour
     public (Complex t1, Complex t2, Vector3 F1, Vector3 F2) RefineModuliByAxis(
       List<Vector3> pts, Complex t10, Complex t20, UnityEngine.Vector3 pcaAxis,
       int maxIter = 50,
-      float angleTolDeg = 16f,
+      float angleTolDeg = 0.5f,
       float fdH = 1e-3f,        // 数值雅可比步长（按 τ 尺度）
       float wDir = 1f,         // 方向闭合项权重（硬约束，优先保证闭合）
       float wSelf = 1f,         // 概率自洽项权重
