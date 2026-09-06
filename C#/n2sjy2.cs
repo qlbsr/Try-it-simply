@@ -24,7 +24,6 @@ public class n2sjy2 : MonoBehaviour
     private void Start()
     {
         var (t1, t2) = ComputeTaus(2,Math.Sqrt(2));
-        Debug.Log((t1,t2));
         for (int trial = 0; trial < 1; trial++)
         {
             // 1. 生成随机点集（单位球体内）
@@ -36,6 +35,7 @@ public class n2sjy2 : MonoBehaviour
             }
 
         }
+
         rp = ComputeRp(points);
         float d2 = Mathf.Asin(Mathf.Cos(30 * Mathf.Deg2Rad) / Mathf.PI);
         a = rp * (1 + Mathf.Sin(d2));
@@ -62,20 +62,18 @@ public class n2sjy2 : MonoBehaviour
        
         var (f01, f02) = FitFociByProbability(points, probs012[0], F01, F02, a);
         Vector3 v4 = (f01 - f02).normalized;
-
+        Debug.Log((v2,v4));
         Debug.Log(((F1 - F2).normalized, (F01 - F02).normalized));
         float[] s0 = BatchProbability(v *c,v *-c, points, a);//pcav
        
         float[] s2 = BatchProbability(v2*c,v2*-c, points, a); // f12
        
         float[] s4 = BatchProbability(v4*c,v4*-c, points, a); // f012
-    
+
+
        
-
-
-
-      
-        for (int i = 0; i < 50; i++)
+       
+        for (int i = 0; i < 100; i++)
         {
 
             float[][] probnew = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
@@ -83,24 +81,36 @@ public class n2sjy2 : MonoBehaviour
             float[][] prob_new = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1_new, t2_new, a);
             var (f_1new, f_2new) = FitFociByProbability(points, prob_new[0], F1_new, F2_new, a);
             Vector3 v6 = (f_1new - f_2new).normalized;
+            
             float[] s6 = BatchProbability(v6 * c, v6 * -c, points, a);
-            Debug.Log((prob_new[0][0], s6[0]));
+           
             float angleDeg5 = Vector3.Angle((v6), (v2));
             float angleDeg6 = Vector3.Angle((v6), (v4));
+            float angleDeg7 = Vector3.Angle((v2),(v4));
           
             float angleDeg9  = Vector3.Angle((v6), v);
-            Debug.Log((angleDeg5, angleDeg6, angleDeg9));
-
-            //if (prob_new[0][0] > Math.Max(probs12[0][0], probs012[0][0])){ break; };
-            if (Math.Abs((angleDeg5 + angleDeg6) * 0.5 - Math.Min(angleDeg5, angleDeg6)) <= 8) { break; }
-            ;//16 有效 #2
-          
-            //if (Math.Abs((angleDeg9 + angleDeg5) * 0.5 - Math.Min(angleDeg9, angleDeg5)) <= 8) { break; };// #1
-
            
 
+         
+          
+            Debug.Log((angleDeg5, angleDeg6, angleDeg9,angleDeg7));
 
-            var (t1_, t2_, deltaDeg, angleDeg_, angleDeg1_, evals, F1z, F2z) = RefineTausWithNM(t1_new, t2_new, points, r30, r45, a, f_2new, f_1new);
+            //if (prob_new[0][0] > Math.Max(probs12[0][0], probs012[0][0])){ break; };
+            //if (angleDeg5 >=16) {
+               // if (Math.Abs((angleDeg5 + angleDeg7) * 0.5 - Math.Min(angleDeg5, angleDeg7)) <= 8 && s6[0] > 0) { break; }
+            //;//16 有效 #2
+            //}
+            //if (Math.Abs((angleDeg9 + angleDeg5) * 0.5 - Math.Min(angleDeg9, angleDeg5)) <= 8) { break; };// #1
+            Vector3 axis = Vector3.Cross(v6, v2).normalized; // 旋转轴
+            Vector3 axis1 = Vector3.Cross(v6, v4).normalized;
+            Quaternion rotation = Quaternion.AngleAxis(angleDeg5*-1, axis);
+            Quaternion rotation1 = Quaternion.AngleAxis(angleDeg6*-1, axis1);
+            Vector3 newf = rotation * v2;
+            Vector3 newv = rotation1 * v4;
+
+
+
+            var (t1_, t2_, deltaDeg, angleDeg_, angleDeg1_, evals, F1z, F2z) = RefineTausWithNM(t1_new, t2_new, points, r30, r45, a, newf, newv);
             t1 = t1_;
             t2 = t2_;
             f1 = F1z;
@@ -115,8 +125,7 @@ public class n2sjy2 : MonoBehaviour
         
        
       
-        Debug.Log((s0[0], s2[0], s4[0]));
-        Debug.Log((probs12[0][0], probs012[0][0]));//tt
+       
        // Debug.Log($"[{string.Join(", ", s0.Select(v => v.ToString("F6")))}]");
        // Debug.Log($"[{string.Join(", ", s5.Select(v => v.ToString("F6")))}]");
 
@@ -514,7 +523,7 @@ public class n2sjy2 : MonoBehaviour
     public (Complex t1, Complex t2, Vector3 F1, Vector3 F2) RefineModuliByAxis(
       List<Vector3> pts, Complex t10, Complex t20, UnityEngine.Vector3 pcaAxis,
       int maxIter = 50,
-      float angleTolDeg = 0.5f,
+      float angleTolDeg = 16f,
       float fdH = 1e-3f,        // 数值雅可比步长（按 τ 尺度）
       float wDir = 1f,         // 方向闭合项权重（硬约束，优先保证闭合）
       float wSelf = 1f,         // 概率自洽项权重
