@@ -243,6 +243,14 @@
 - **Z2 两级削弱的成因**：① ang≥16 约束排除达成时 ∠(d,v1) 或 ∠(d,v3)<16° 的数据集（ball0/ball2/ellip3/cube2，A✅但B✗）——很多数据集收敛到贴近某参考，此约束过严；② s5 最小约束排除达成时 s5[0] 非最小的数据集（ball1/ellip2/cube1，B✅但C/D✗）。
 - **Z3 结论**：**"s5 必须最小"不是达成特征**——[0] 点达成时 s5 几乎从不是最小（阶段 T/U：s5 最小占比仅 6~30%，[0] 是最差观测点），作门控会漏掉 83% 合法达成。**#2 原条件（75%）是最佳**；加任何 s5 极值约束只会更差。记录排除。
 
+### 阶段 AA：10 夹角关系分析（n2sjy2.cs 的 angleDeg~10）
+脚本：`experiments/analyze_10_angles.py` + 搭配对比（fnd 版 vs Fnd 版）
+方向向量：d=f1−f2（理论拟合，迭代更新）、Fd=F1−F2（理论提取，固定）、F01d=F01−F02（(0,1)提取，固定）、fd01=f01−f02（(0,1)拟合，固定）、ffd=f1f−f2f（初始理论拟合，固定）、Fnd=F1_new−F2_new（LM精化提取，每轮）、fnd=f_1new−f_2new（LM后拟合，每轮）、v=PCA。
+- **AA1 完全冗余组（|corr|=1.00）**：`ang(Fnd,Fd)↔ang(fnd,ffd)`、`ang(Fnd,F01d)↔ang(fnd,fd01)`、`ang(fnd,v)↔ang(Fnd,v)` → Fnd（提取）与 fnd（拟合）在 LM 后几乎同向，三对角各自等价；**实际独立角约 6 个**。
+- **AA2 判别力排名**（达成 vs 未达成，34 轮样本）：ang(fnd,fd01)=angleDeg6 **1.30**、ang(Fnd,F01d)=angleDeg4 **1.26** 最高；ang(fnd,ffd)=angleDeg5 与 ang(Fnd,Fd)=angleDeg3 各 0.82；ang(d,v)=angleDeg 0.34；**ang(fnd,v)=angleDeg9 0.07、ang(Fnd,v)=angleDeg10 0.02 最差**（含 v 的角在达成/未达成时都≈100°，几乎无判别力）。
+- **AA3 搭配对比实测**：fnd 版（angleDeg5/6，#2 当前所用）与 Fnd 版（angleDeg3/4）做等角条件，8 数据集达成/未达成**完全相同**（达成 4 个，cond 值相近 0.0~2.5）→ **任选一组即可，效果相同**（冗余）。
+- **AA4 结论**：① 最优 = **等角条件 #2**（判别力最高的两角做差：|∠(fnd,ffd)−∠(fnd,fd01)|/2≤8），用户当前选择正确；② angleDeg3/4 与 5/6 完全等价，任选；③ **含 v 的角（angleDeg9/10）无判别力，勿用于判据**——再次确认无 PCA 方向（v1/v3 族）是最佳参考。
+
 ---
 
 ## 3. DeepSeek 改进清单（改了什么、为什么、效果）

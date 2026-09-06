@@ -21,12 +21,10 @@ public class n2sjy2 : MonoBehaviour
     public Vector3 f1z;
     public Vector3 f2z;
     public List<Vector3> points;//角平方线就是两个向量相加
-    public float[] s5;
-    public float fj5;
-    public float[][] probs12z;
     private void Start()
     {
         var (t1, t2) = ComputeTaus(2,Math.Sqrt(2));
+        Debug.Log((t1,t2));
         for (int trial = 0; trial < 1; trial++)
         {
             // 1. 生成随机点集（单位球体内）
@@ -50,99 +48,77 @@ public class n2sjy2 : MonoBehaviour
       
         float[][] probs12 = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
         var (F1, F2) = ExtractFoci(points, probs12[1], probs12[3][1], probs12[2], probs12[3][2]);
-        Vector3 v1 = (F1 - F2).normalized;
+        
 
       
 
 
         var (f1, f2) = FitFociByProbability(points, probs12[0], F1, F2, a);
         Vector3 v2 = (f1 - f2).normalized;
-        //float fj2 = Mathf.Atan2(v2.z, v2.x) * Mathf.Rad2Deg;
+      
         float[][] probs012 = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t_, t_, a);
         var (F01,F02) = ExtractFoci(points, probs012[1], probs012[3][1], probs012[2], probs012[3][2]);
-        Vector3 v3 = (F01 - F02).normalized;
+     
        
         var (f01, f02) = FitFociByProbability(points, probs012[0], F01, F02, a);
         Vector3 v4 = (f01 - f02).normalized;
+
+        Debug.Log(((F1 - F2).normalized, (F01 - F02).normalized));
+        float[] s0 = BatchProbability(v *c,v *-c, points, a);//pcav
        
-        Vector3 vj = v.normalized + (F1 - F2).normalized;
-        var (t1_01, t2_01, F1_n, F2_n) = RefineModuliByAxis(points, t_, t_, vj, 50);
-      
-        float[] s0 = BatchProbability(v * c, v * -c, points, a);//pcav
-        float[] s1 = BatchProbability(v1*c,v1*-c, points, a);// F12
         float[] s2 = BatchProbability(v2*c,v2*-c, points, a); // f12
-        float[] s3 = BatchProbability(v3*c,v3*-c, points, a); // F012
+       
         float[] s4 = BatchProbability(v4*c,v4*-c, points, a); // f012
     
        
 
 
 
-        s5 = new float[s4.Length];
-        for (int i =0;i < 50; i++)
+      
+        for (int i = 0; i < 50; i++)
         {
 
             float[][] probnew = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
             var (t1_new, t2_new, F1_new, F2_new) = RefineModuliByAxis(points, t_, t_, (f1 - f2).normalized, 50);
-            // var (f11, f22) = FitFociByProbability(points, probsnew[0], F1_new , F2_new, a);
-            float angleDeg = Vector3.Angle((f1 - f2), v);
-            float angleDeg1 = Vector3.Angle((f1 - f2), (F1-F2));
-            float angleDeg2 = Vector3.Angle((f1 - f2), (F01 - F02));
-            //float angleDeg3 = Vector3.Angle((F1 - F2), (F01 - F02));
+            float[][] prob_new = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1_new, t2_new, a);
+            var (f_1new, f_2new) = FitFociByProbability(points, prob_new[0], F1_new, F2_new, a);
+            Vector3 v6 = (f_1new - f_2new).normalized;
+            float[] s6 = BatchProbability(v6 * c, v6 * -c, points, a);
+            Debug.Log((prob_new[0][0], s6[0]));
+            float angleDeg5 = Vector3.Angle((v6), (v2));
+            float angleDeg6 = Vector3.Angle((v6), (v4));
+          
+            float angleDeg9  = Vector3.Angle((v6), v);
+            Debug.Log((angleDeg5, angleDeg6, angleDeg9));
+
+            //if (prob_new[0][0] > Math.Max(probs12[0][0], probs012[0][0])){ break; };
+            if (Math.Abs((angleDeg5 + angleDeg6) * 0.5 - Math.Min(angleDeg5, angleDeg6)) <= 8) { break; }
+            ;//16 有效 #2
+          
+            //if (Math.Abs((angleDeg9 + angleDeg5) * 0.5 - Math.Min(angleDeg9, angleDeg5)) <= 8) { break; };// #1
+
+           
 
 
-
-
-
-
-
-
-            Debug.Log((angleDeg, angleDeg1,angleDeg2));
-
-
-
-
-            if (angleDeg1 >= 16 && angleDeg2 >= 16)
-            {
-                if (Math.Abs((angleDeg2 + angleDeg1) * 0.5 - Math.Min(angleDeg2, angleDeg1)) <= 8) { break; }
-                 ;//16 有效 #2}
-            }
-            //f (Math.Abs((angleDeg + angleDeg1) * 0.5 - Math.Min(angleDeg, angleDeg1)) <= 8) { break; };// #1
-
-            Vector3 axis = Vector3.Cross((F1_new - F2_new).normalized, (F1 - F2).normalized);
-            Vector3 axis1 = Vector3.Cross((F1_new - F2_new).normalized, (F01 - F02).normalized);
-            Quaternion rotation = Quaternion.AngleAxis(angleDeg * -1, axis);
-            Quaternion rotation1 = Quaternion.AngleAxis(angleDeg * -1, axis1);
-            Vector3 newv = rotation * (F01 -F02).normalized ;
-            Vector3 newF = rotation1 * (F1 - F2).normalized;
-            var (t1_, t2_ ,deltaDeg,angleDeg_,angleDeg1_,evals,F1z,F2z) = RefineTausWithNM(t1_new, t2_new, points, r30, r45, a, newv, newF);
+            var (t1_, t2_, deltaDeg, angleDeg_, angleDeg1_, evals, F1z, F2z) = RefineTausWithNM(t1_new, t2_new, points, r30, r45, a, f_2new, f_1new);
             t1 = t1_;
             t2 = t2_;
             f1 = F1z;
             f2 = F2z;
             this.f1z = f1;
             this.f2z = f2;
-            Vector3 v5 = (f1z - f2z).normalized;
-            float angleDegz = Vector3.Angle(v5, v);
-            Debug.Log(angleDegz);
 
-            s5 = BatchProbability(v5*c,v5*-c, points, a);
-            probs12z = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
             //if (Math.Abs(probs012[0][0] - probs12z[0][0]) <= 0.01) { break; };//a2 = a3
             // 当#2有效时，s0[0] 可能和s5[0]很近
-            
+
         }
-        Debug.Log((s0[0], s2[0], s4[0], s5[0]));
-        float min = Math.Min(s2[0], Math.Min(s4[0], s5[0]));
-        Debug.Log((s0[0], min));
-
         
-
-
-        Debug.Log((probs12[0][0], probs012[0][0], probs12z[0][0]));//tt
-
-        Debug.Log($"[{string.Join(", ", s0.Select(v => v.ToString("F6")))}]");
-        Debug.Log($"[{string.Join(", ", s5.Select(v => v.ToString("F6")))}]");
+       
+      
+        Debug.Log((s0[0], s2[0], s4[0]));
+        Debug.Log((probs12[0][0], probs012[0][0]));//tt
+       // Debug.Log($"[{string.Join(", ", s0.Select(v => v.ToString("F6")))}]");
+       // Debug.Log($"[{string.Join(", ", s5.Select(v => v.ToString("F6")))}]");
 
 
 
