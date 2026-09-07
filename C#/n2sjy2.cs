@@ -21,75 +21,108 @@ public class n2sjy2 : MonoBehaviour
     public Vector3 f1z;
     public Vector3 f2z;
     public List<Vector3> points;//角平方线就是两个向量相加
+    public float angleDegodr;
+    public float angleDegnew;
     private void Start()
     {
         var (t1, t2) = ComputeTaus(2,Math.Sqrt(2));
-        VectorList vectorList = JsonVectorParser.jsonpy("pyjson");
-        points = vectorList.Vector3List;
+        for (int trial = 0; trial < 1; trial++)
+        {
+            // 1. 生成随机点集（单位球体内）
+
+            for (int i = 0; i < 200; i++)
+            {
+                Vector3 p = UnityEngine.Random.insideUnitSphere;
+                points.Add(p);
+            }
+
+        }
         rp = ComputeRp(points);
         float d2 = Mathf.Asin(Mathf.Cos(30 * Mathf.Deg2Rad) / Mathf.PI);
+       
         a = rp * (1 + Mathf.Sin(d2));
         float e3 = (float)(Math.Cos(d2) * 2 / (1 + Math.Sin(d2)));
+        Debug.Log(e3);
         float h = rp * Mathf.Cos(d2);
         float c = h * e3;
         List<(Complex x, Complex y)> yzqx1 = yzqx(points, out r45, out r30, out r74, rp);
         Complex t_ = new Complex(0, 1);
-        Vector3 v = pca(points);
-      
+        Vector3 v = pca(points).normalized;
         float[][] probs12 = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
         var (F1, F2) = ExtractFoci(points, probs12[1], probs12[3][1], probs12[2], probs12[3][2]);
-        
-
-      
-
-
         var (f1, f2) = FitFociByProbability(points, probs12[0], F1, F2, a);
         Vector3 v2 = (f1 - f2).normalized;
-      
+        Vector3 f1f = f1;
+        Vector3 f2f = f2;
+
         float[][] probs012 = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t_, t_, a);
         var (F01,F02) = ExtractFoci(points, probs012[1], probs012[3][1], probs012[2], probs012[3][2]);
-     
-       
         var (f01, f02) = FitFociByProbability(points, probs012[0], F01, F02, a);
         Vector3 v4 = (f01 - f02).normalized;
-        Debug.Log((v2,v4));
-        Debug.Log(((F1 - F2).normalized, (F01 - F02).normalized));
         float[] s0 = BatchProbability(v *c,v *-c, points, a);//pcav
-       
         float[] s2 = BatchProbability(v2*c,v2*-c, points, a); // f12
-       
+    
         float[] s4 = BatchProbability(v4*c,v4*-c, points, a); // f012
 
 
-       
-      
-        for (int i = 0; i < 80; i++)
+        int a22 = 1;
+        if(a22 == 1)
         {
+            for (int i = 0; i < 100; i++)
+            {
 
-            float[][] probnew = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
-            var (t1_new, t2_new, F1_new, F2_new) = RefineModuliByAxis(points, t_, t_, (f1 - f2).normalized, 5);
-            float[][] prob_new = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1_new, t2_new, a);
-            var (f_1new, f_2new) = FitFociByProbability(points, prob_new[0], F1_new, F2_new, a);
-            Vector3 v6 = (f_1new - f_2new).normalized;
-            float[] s6 = BatchProbability(v6 * c, v6 * -c, points, a);
-            float angleDeg5 = Vector3.Angle((v6), (v2));
-            float angleDeg6 = Vector3.Angle((v6), (v4));
-            float angleDeg9  = Vector3.Angle((v6), v);
-            Debug.Log((angleDeg9));
-            Vector3 axis = Vector3.Cross(v6, v2).normalized; // 旋转轴
-            Vector3 axis1 = Vector3.Cross(v6, v4).normalized;
-            Quaternion rotation = Quaternion.AngleAxis(angleDeg5*-1, axis);
-            Quaternion rotation1 = Quaternion.AngleAxis(angleDeg6*-1, axis1);
-            Vector3 newf = rotation * v2;
-            Vector3 newv = rotation1 * v4;
-            var (t1_, t2_, deltaDeg, angleDeg_, angleDeg1_, evals, F1z, F2z) = RefineTausWithNM(t1_new, t2_new, points, r30, r45, a, newf, newv);
-            t1 = t1_;
-            t2 = t2_;
-            f1 = F1z;
-            f2 = F2z;
-            this.f1z = f1;
-            this.f2z = f2;
+                float[][] probnew = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
+                angleDegnew = Vector3.Angle((f01 -f02),(f1 -f2));
+                var (t1_new, t2_new, F1_new, F2_new) = RefineModuliByAxis(points, t_, t_, (f1 - f2).normalized, 50);//即使是单个震荡也会接近，只是nm有问题
+                float[][] prob_new = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1_new, t2_new, a);
+                var (f_1new, f_2new) = FitFociByProbability(points, prob_new[0], F1_new, F2_new, a);
+                Vector3 v6 = (f_1new - f_2new).normalized;
+                float[] s6 = BatchProbability(v6 * c, v6 * -c, points, a);
+                float angleDeg5 = Vector3.Angle((v6), (v2));
+                float angleDeg6 = Vector3.Angle((v6), (v4));
+                float angleDeg9 = Vector3.Angle((v6), v);
+                
+                Debug.Log((angleDeg9,angleDegnew,angleDegodr));
+               
+
+                //if (Math.Abs(angleDegodr - angleDegnew) > 9 && angleDeg9 <1) { break; }
+                Vector3 axis = Vector3.Cross(v6, v2).normalized; // 旋转轴
+                Vector3 axis1 = Vector3.Cross(v6, v4).normalized;
+                Quaternion rotation = Quaternion.AngleAxis(angleDeg5 * -1, axis);
+                Quaternion rotation1 = Quaternion.AngleAxis(angleDeg6 * -1, axis1);
+                Vector3 newf = rotation * v2;
+                Vector3 newv = rotation1 * v4;
+               
+                var (t1_, t2_, deltaDeg, angleDeg_, angleDeg1_, evals, F1z, F2z) = RefineTausWithNM(t1_new, t2_new, points, r30, r45, a, newf.normalized, newv.normalized);
+                t1 = t1_;
+                t2 = t2_;
+                f1 = F1z;
+                f2 = F2z;
+                this.f1z = f1;
+                this.f2z = f2;
+                angleDegodr = 0;
+            }
         }
+      
+        Complex t1_1 = new Complex(0.323141198796178, 0.984532062400871);
+        Complex t2_2 = new Complex(0.292181566064164, 1.00644754227822);
+        Vector3 vector = new Vector3(-0.38f, 0.19f, 0.91f);
+
+         
+
+
+       
+       
+
+
+
+
+
+
+
+
+
+
     }
     /// <summary>
     /// 从当前 t1,t2 出发，使用 Nelder-Mead 直接最小化 |Δ|。
@@ -120,7 +153,7 @@ public class n2sjy2 : MonoBehaviour
             float[][] probs = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
             var (F1, F2) = nsjy.ExtractFoci(points, probs[1], probs[3][1], probs[2], probs[3][2]);
             var (f1, f2) = FitFociByProbability(points, probs[0], F1, F2, a);
-            Vector3 d = f1 - f2;
+            Vector3 d = (f1 - f2).normalized;
             F1z = f1;
             F2z = f2;
             if (d.sqrMagnitude < 1e-12f)
@@ -141,7 +174,7 @@ public class n2sjy2 : MonoBehaviour
         // 调用内嵌 Nelder-Mead（或复用 nsjy4 中的 NelderMead.Minimize）
         var (bestX, bestF, evals) = NelderMead.Minimize(
             x => Objective(x, out _, out _), x0, lb, ub,
-            maxEvals: 600, stopF: 10f);   // 目标 |Δ| ≤ 10°
+            maxEvals: 100, stopF: 0.5f);   // 目标 |Δ| ≤ 10°
 
         Complex t1Opt = new Complex(bestX[0], bestX[1]);
         Complex t2Opt = new Complex(bestX[2], bestX[3]);
@@ -180,7 +213,9 @@ public class n2sjy2 : MonoBehaviour
               Mathf.Cos(d2 * Mathf.Deg2Rad),
               Mathf.Sin(d2 * Mathf.Deg2Rad) * Mathf.Sin(fj * Mathf.Deg2Rad)
           );
+        Debug.Log((fj, d2));
         return v3;
+        
 
     }
     public static float ComputeRp(List<Vector3> points)
@@ -496,6 +531,18 @@ public class n2sjy2 : MonoBehaviour
                 dir.Normalize();
                 if (Vector3.Dot(dir, axis) < 0) dir = -dir;   // 只约束“直线方向”，忽略 ±
                 angleDeg = Vector3.Angle(dir, axis);
+                if (angleDegodr == 0)
+                {
+                    angleDegodr = angleDeg;
+                }
+
+
+
+
+
+
+
+
             }
           
             Debug.Log($"[iter {iter}] cost={cost:E3} angle={angleDeg:F3}°  t1=({x[0]:F4},{x[1]:F4}) t2=({x[2]:F4},{x[3]:F4})");
@@ -549,18 +596,19 @@ public class n2sjy2 : MonoBehaviour
         // 主链路：t ─► 格概率 ─► 焦点
         float[][] probs = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
         var (F1, F2) = ExtractFoci(pts, probs[1], probs[3][1], probs[2], probs[3][2]);
+        var (f1, f2) = FitFociByProbability(points, probs[0], F1, F2, a);
 
         // 修正视角：从焦点反推概率（注意括号！）
 
 
-        
+
         double[] r = new double[n + 9];
         double invSqrtN = 1.0 / Math.Sqrt(n);
         for (int i = 0; i < n; i++)
         {
             Vector3 p = pts[i];
-            float d1 = Vector3.Distance(p, F1);
-            float d2 = Vector3.Distance(p, F2);
+            float d1 = Vector3.Distance(p,f1);
+            float d2 = Vector3.Distance(p, f2);
             float delta = d1 + d2 - 2f * a;
             float probFoci = Mathf.Exp(-Mathf.Abs(delta) / (2f * a));  // 修正后的 BatchProbability
             r[i] = wSelf * (probs[0][i] - probFoci) * invSqrtN;
@@ -730,8 +778,8 @@ public static class DeviationCalculator
         //    useSoftMin=true 时用自适应 γ 软最小距离 (连续可微, 缓解硬 min 的平台/梯度消失)
         for (int i = 0; i < n; i++)
         {
-            double d1 = useSoftMin ? SoftMinDistance(r30[i], lattice1) : NearestDistance(r30[i], lattice1);
-            double d2 = useSoftMin ? SoftMinDistance(r45[i], lattice2) : NearestDistance(r45[i], lattice2);
+            double d1 = NearestDistance(r30[i], lattice1);
+            double d2 = NearestDistance(r45[i], lattice2);
             d1Arr[i] = (float)d1;
             d2Arr[i] = (float)d2;
         }
