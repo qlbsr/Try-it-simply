@@ -194,7 +194,11 @@ def pose_matrix(angles, mem):
     """
     n = angles.shape[0]
     out = np.zeros((n, 6, 6))
-    Rm = np.real(mem)
+    # Re(U) 对酉矩阵【不保正交】, 必须取它的最近正交因子(极分解), 否则位姿矩阵不闭合
+    Rm = np.zeros((mem.shape[0], 2, 2))
+    for i in range(mem.shape[0]):
+        U_, s_, Vt_ = np.linalg.svd(np.real(mem[i]))
+        Rm[i] = U_ @ Vt_
     for i in range(n):
         ax, ay, az = angles[i, 0], angles[i, 1], angles[i, 2]
         cx, sx = math.cos(ax), math.sin(ax)
