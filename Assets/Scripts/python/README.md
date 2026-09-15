@@ -22,6 +22,70 @@
 | `ebf_algorithm.py` | EBF 算法 |
 | `analyze_relationship.py` / `fused_n2sjy2_nsjy4.py` / `combine_n2sjy2_nsjy4.py` | 通道关系与融合分析 |
 
+## nn_dn_sx.py —— dn/sx 的神经网络替换（主线）
+
+把 C# 里**不可微 / 硬划分**的两步换成可学习、可微的模块。
+
+### 原机制与不可微点
+
+| 原机制（`C#/legacy/sjy.cs`） | 为什么必须换 |
+|---|---|
+| `dn()`：`jj = (int)(360/d2)`，等角扇区 `vcs[i] = AngleAxis(i*d2, v3) @ cs` | `(int)` 截断 + 硬扇区边界 → 不可导；扇区中心固定不可学 |
+| `sx()`：每扇区 `prmax = max‖perp(Ap, vcs)‖`，`rp = max_sector prmax` | 硬 `max` 梯度只走单点且断裂 |
+
+实测（`Resources/points.json`）：
+- `rp = 51.154373`，点云 `|p|` 中位 ≈ 0.5 → **rp 虚高约 100 倍**
+- 经 `MapDoubleConeToLeaf` 后 `|uv|` 中位 9.04e-5、跨 3.94 dex → 点集严重失真
+- 透镜场 `g ∈ [112, 11697] ≫ 2` → `Phi(g)=0`、`V ≡ 0`
+
+### 三个互相拉扯的要求
+
+- **(a) 覆盖**：`rp ≥ max_i ‖perp(p_i, v3)‖`
+- **(b) 最小**：`rp` 尽量小（锥最紧）
+- **(c) 不失真 + 合锥**：共形映射后点集不失真，且贴合构造出的圆锥
+
+(b) 要 `rp = max ρ`，(c) 要 `rp = 几何均值 ρ` → **只有把 ρ 的分布变窄才能同时满足**。
+这正是分组层（`dn`/`sx`）的职责，也是它必须可学习而非固定划分的理由。
+
+**关键推论**：覆盖 + 最小 ⇒ `rp → soft_max(ρ)`，而 `soft_max(ρ)` 依赖 `v3`
+⇒ 最小化 `rp` 等价于"找一个让柱面半径最小的轴"。这就是"优化 rp 会带动 v3 自动变化"的准确含义。
+
+### 函数表
+
+| 函数 | 作用 | 对应原机制的哪一步 |
+|---|---|---|
+| `hat(w)` / `exp_so3(w)` | 反对称矩阵 / so(3) 指数映射 | 无奇点的轴参数化 |
+| `unit(v, eps)` | 数值安全归一化 | 替代裸 `normalize` |
+| `Axis` | 可学习 `v3`（`nn.Module`） | `v3 = normalize(c1−c2)` |
+| `ortho_frame(v3)` | 由 `v3` 构造正交基 | `yzqx` 坐标系 |
+| `cylinder_radius(P, v3)` | `ρ_i = ‖perp(p_i, v3)‖` | `sx` 里的 `perp(Ap, vcs)` |
+| `soft_max(x, beta)` | 可微上界（恒 ≥ max） | `sx` 的 `prmax` / `rp` 硬 max |
+| `soft_quantile(x, q, tau, iters)` | 可微分位数（二分 + 隐函数定理） | `rp` 硬赋值 |
+| `SoftSectors(K, kappa)` | K 个可学习扇区中心 + von Mises 软分配（用 `(cosθ, sinθ)` 内积，无分支割线） | `dn` 的等角扇区 `AngleAxis(i*d2, v3)` |
+| `AxisFromTh2(d2_rad)` | 还原 `th2` 的 1-DOF `v3` 耦合 | `th2` |
+| `loss_fn(rho, A, rp, d2, w, scale)` | soft_max 上界 + 覆盖惩罚 | 新目标函数 |
+| `scan_axis_floor(P, d2, n, beta)` | 4000 轴扫描求 `rp` 经验地板 | 给出可达下界 |
+| `report(tag, ...)` | 三模式对比打印 | 现状 / `v3` 自由 / `v3` 由 `th2` 耦合 |
+
+### 已验证数值
+
+| 量 | 值 |
+|---|---|
+| `std(log ρ)` 最优轴 / 最差轴 / PCA 轴 | 0.462495 / 0.742192 / 0.589057 |
+| `soft_max(ρ)` 最优轴 | 1.310911 |
+| `1/sin(d2)`（`d2 = 44.713528°`） | 1.1137 |
+| C# `sx` 给出 `rp` | 51.154373 |
+| PCA 轴硬 max `rp` | 1.463559（→ C# 是它的 **35 倍**） |
+
+`points.json` 的 PCA 特征值比 `0.4296 / 0.3216 / 0.2488`（近球形）⇒ ρ 的离散度是**内禀的**，
+不是选轴不当造成的。学习到的 `v3` 收敛到地板附近（`rp` 1.4658→1.4195、`ρ_max` 1.4636→1.4042），但增益很小。
+
+两条设计修正记录：
+1. 初版 `soft_max` + 自由 `rp` 的覆盖惩罚会让 `rp/ρ_max = 0.919 < 1`（违反覆盖）
+   → 改为 **`rp = soft_max(rho, BETA)` 由构造保证覆盖**。
+2. `v3.y ≡ 0` 在 `rp = 0.2068 / 0.6893 / 2.0679 / 6.8929` 下均成立
+   → 证实 `th2` 只有 **1 个自由度**（`th2` 的两个输出共享同一 y）。
+
 ## experiments/ 的模块簇
 
 这 16 个文件互相依赖，**不能拆开**：

@@ -1,8 +1,9 @@
 # nsjy 算法全流程分析日志（DeepSeek 改进记录）
 
 > 项目：`C:\Users\23128\My project (2)\Assets\Scripts`
-> 日期：2026-08-29
+> 日期：2026-08-29 ~ 2026-09-01（持续更新）
 > 内容：整套 nsjy 家族代码的数学本质分析、实验验证过程、DeepSeek 逐项改进清单、剩余问题、参考文献与相关项目清单。
+> **重点：§8 是函数 ↔ 神经网络对应表（不可微环节 → 网络模块），§10 是仓库最终形态与废物核查。**
 
 ---
 
@@ -14,12 +15,19 @@
 | `nsjy.cs` | 基础算法库：`InverseTh4`/`yzqx`（圆锥坐标变换）、`ComputeRp`、`ComputeTaus`（CM 模量）、`Carlsonfk`（RF/RD/K/E/DK/NK 复数椭圆积分）、`ExtractFoci`/`FitFocus`、`FitFociByProbability`/`BatchProbability`、`pca`、`LatticeAnalysis`（格基/周期矩阵）、`LLL`、`ComplexLinearFit`、`LatticeRansac`、`DeviationCalculator`（最近格点概率场） |
 | `n2sjy.cs` | 闭环优化 `RefineModuliByAxis`（LM + 数值雅可比 + NormalizeTau） |
 | `n2sjy2.cs` | 双角度外环：`angleDeg`(与PCA夹角)/`angleDeg1`(与初始焦点方向夹角)，停止条件 `\|angleDeg−angleDeg1\|/2≤5` |
-| `nsjy3.cs` | 两套判断闭环：档1(θ<0.5°) / 容错带 / 档2(自迭代)，含 best-of-N 重试 |
-| `nsjy4.cs` | Nelder-Mead 无梯度求解器，快速达成两角条件 \|Δ\|≤10° |
-| `nsjy5.cs` | 改进版 EBF（探索→最佳点→微调），自包含私有 Nelder-Mead |
+| `sjysjy.cs` | 双锥面 → 叶片展开：`MapDoubleConeToLeaf`、`SolveC3`、`SolveTFromE`；**新增 `Elliptic` 类**（Carlson RF/RD 的 F/E + 准周期约化） |
+| `v2sjy.cs` | **透镜体积闭式 + ABCD 四通道**：`LensVolumeSimple`、`ComputeAllFeatures`、`NappePair`、`LocalQuadHessian`、`StiffnessProjection`、`FitChannels`、`Delta`/`DeltaIsRational`/`RatioFromDelta`/`TauFromDelta`；**零第三方依赖** |
+| `legacy/sjy.cs` | 旧 RBF 全流程。本轮把 `rbf` 函数体换成**叶透镜链**（`ComputeLeafLens`→`th4`→`LocalQuadHessian`→`StiffnessProjectionFromH`），旧 RBF 体保留为 `rbf_RBF` 供对照 |
+| `legacy/sjy1.cs` / `sjy11.cs` / `sjy112.cs` / `xs.cs` | 球面 RBF 旁支、JSON 解析、UI；纯 Unity 依赖，不参与数值验证 |
+| `Assets/car.cs` | 与算法无关的演示脚本 |
+
+> 已删除：`DLL.NET/`（5 个旧 DLL，已并入 `Assets/Plugins/`）、`gsjy.cs`、`nsjy3.cs`/`nsjy4.cs`/`nsjy5.cs`（思路已进入 `n2sjy2.cs` 与 `ebf_algorithm.py`）。
 
 ### Python（移植/验证）
-`nsjy_algorithms.py`（全量移植）、`n2sjy2.py`、`test_convergence.py`、`test_axis_hypothesis.py`、`verify_*.py`（deviation/falsify/fixedpoint/tier2/range/final/orig_angles/corrected/correspondence/all_sets）、`measure_deviation_floor.py`、`test_nelder_mead.py`、`data_driven_axis.py`、`combine_n2sjy2_nsjy4.py`、`ebf_algorithm.py`、`verify_nsjy5.py` 等。
+
+- **顶层 8 个**：`nn_dn_sx.py`（主线，见 §8.2）、`nsjy_algorithms.py`（全量移植）、`n2sjy2.py`、`data_driven_axis.py`、`ebf_algorithm.py`、`analyze_relationship.py`、`fused_n2sjy2_nsjy4.py`、`combine_n2sjy2_nsjy4.py`
+- **`experiments/` 16 个**：4 个互相 import 的复刻库（`verify_v2_provenance/perpoint/route/simplified.py`）+ 12 个结论脚本（见 `python/README.md`）
+- **`archive/` 138 个**：历史一次性脚本，归档不再维护
 
 ---
 
@@ -286,6 +294,11 @@
 | 8 | 两角条件改用 **Nelder-Mead 无梯度优化**（nsjy4） | LM 在分段常数平台无梯度 | 117~330 次求值达 \|Δ\|≤10，多数 0.0° |
 | 9 | 探索重拟合换 `extract_foci`（nsjy5） | `fit_foci_by_probability` 每轮 ~500ms | 成本 -100×，6/6 达标 ~64~94s |
 | 10 | 全量 Python 移植 + 20+ 验证脚本 | 快速实验验证 | 所有结论均有复现脚本 |
+| 11 | `legacy/sjy.cs` 的 `rbf`（球面 RBF 刚度场）→ **叶透镜链** | RBF 核宽是超参、拟合是黑箱 | `ComputeLeafLens`→`th4`→`LocalQuadHessian`→`StiffnessProjectionFromH` 可编译可运行；旧 RBF 体保留为 `rbf_RBF` 供对照 |
+| 12 | `v2sjy.cs` 新增 **ABCD 四通道**块 | 需要把"外部势梯度"变成可判别的量 | `FitChannels`/`Lstsq4`(MGS-QR)/`Delta`/`DeltaIsRational`（连分数精确终止）/`TauFromDelta`；常 Hessian 只进 A、B，实测 \|C\|=8.96e-17、\|D\|=2.55e-17；留一法漂移全在 1e-16 |
+| 13 | 数值库全部回退 `Numerics.NET` → `MathNet.Numerics` | `Numerics.NET` 的 `Matrix<T>`/`Vector<T>` 抛 `LicenseException: Invalid trial key`（商业授权）；`Complex<T>`+`Special.*` 免授权但不够用 | 6 个文件共 ~92 处 API 回退（`Matrix.Zeros`→`Build.Dense`、`GetInverse`→`Inverse`、`GetSingularValueDecomposition`→`Svd`、`GetSlice`→`SubVector`、`Vector.Length`→`Count`）；`sjysjy.cs` 新增自有 `Elliptic` 类替代 `Special.EllipticE`/`Elliptic.EInc` |
+| 14 | 仓库结构：删嵌套 `.git`、仓库根从 `Assets/Scripts` 上移到工程根、补根 `.gitignore` 与根 `README.md` | 仓库根过深 ⟹ `Assets/Plugins/`、`Assets/Resources/points.json`、`ProjectSettings/` 全在库外，clone 下来无法编译；`.git/.git` 嵌套使 GitHub Desktop 拒传 | clone 可编译；`Library/`(1.62GB)、`.vs/`(13.6MB) 等被挡；工作区 0 变更、`fsck` 通过 |
+| 15 | `dn`/`sx` 改写为**可学习/可微模块**（`python/nn_dn_sx.py`） | `(int)` 截断 + 硬 `max` 不可导；实测 `rp` 虚高 ~100 倍、透镜体积 `V ≡ 0` | `soft_max` 可微上界、`soft_quantile` 隐式微分、`SoftSectors` von Mises 软分配、`Axis` so(3) 参数化；见 §8.2 |
 
 ---
 
@@ -305,6 +318,9 @@
 ---
 
 ## 5. 剩余问题与开放方向
+
+> ⚠️ 本节写于早期阶段。其中第 1 项（模型偏差）与第 3 项（泛化）已由后续阶段消解，
+> **最新清单见文末 §9**；函数↔神经网络对应见 **§8**。
 
 1. **模型偏差（0.6 地板）**：格距离 ≠ 3D 距离，只影响概率场拟合精度；方向对齐已证明可达（阶段 K），地板不再是方向问题的障碍。剩余影响：概率值本身的保真度。
 2. **全局搜索策略**：单起点 NM 会困（51~110°），随机/网格+抛光可达 0.0° → 下一步是把"探索阶段随机化/多起点"正式并入闭环（nsjy5 的探索已部分做到）。
@@ -405,3 +421,336 @@
    - A 纯 |odr-new|>16: iter41 跳变后触发, 停时 a9=6.8 (尚未到最优)
    - B &&a9<1: a9 最低 ~2>1 → **永不触发**, 跑满轮次 (Unity a9=2.0>1 同理不触发)
    - Unity @80-100 终止: 若纯A, 跳变应在~80轮后发生 (float32/NM细节差异致跳变轮次不同)
+
+---
+
+## 阶段 AF：数值库回退 `Numerics.NET` → `MathNet.Numerics`（决定）
+
+**起因**：`Numerics.NET` 的 `Matrix<T>` / `Vector<T>` 在 `sjy.pca()` 处抛
+`LicenseException: Invalid trial key` —— 该库为商业授权，试用 key 无效。
+`Complex<T>` 与 `Special.*` 恰好免授权，所以早期只有部分代码报错，掩盖了问题的全局性。
+
+**处理**：全部 `.cs` 回退到 MathNet.Numerics 5.0.0（MIT）。共 6 个文件 ~92 处：
+
+| API（Numerics.NET） | API（MathNet） |
+|---|---|
+| `Matrix.Zeros<T>(r,c)` | `Matrix<T>.Build.Dense(r,c)` |
+| `Vector.Zeros<T>(n)` | `Vector<T>.Build.Dense(n)` |
+| `GetInverse()` | `Inverse()` |
+| `GetSingularValueDecomposition()` | `Svd()` |
+| `LeftSingularVectors` / `RightSingularVectors` / `SingularValues` | `U` / `VT` / `S` |
+| `Vector<T>.Length` | `Count` |
+| `GetSlice(0,N-1)` | `SubVector(0,N)` |
+| `Complex.FromPolar` | `FromPolarCoordinates` |
+
+**易错点**：`i` 的命名不同 —— `System.Numerics.Complex` 是 `ImaginaryOne`，
+`Numerics.NET.Complex<T>` 是 `I`（且**没有** `ImaginaryOne`，静态字段只有 `I/One/Zero/NaN/Infinity`）。
+回退时 12 处 `Complex.I` 必须改回 `Complex.ImaginaryOne`。
+
+**`sjysjy.cs` 附带**：`Special.EllipticE` 被自有 `Elliptic` 类替代（K / E / FRaw / ERaw / F / EInc）。
+
+**验证**：
+- `mathnet_check` 编译全部 `.cs`（除 `xs.cs`/`sjy11.cs`）：0 error / 3 warning
+- `mathnet_run` 端到端：`rbf_RBF` τ = +0.406314+0.039100i、`|ratio|` = 0.782180、j = 8.511e7、8735 ms；
+  `rbf` τ = +0.433940+0.156416i、`|ratio|` = 0.374265、j = −1.253e7、5059 ms
+
+---
+
+## 阶段 AG：RBF 被叶透镜链替换
+
+`legacy/sjy.cs` 的 `rbf()` 原本用球面 RBF 拟合一个刚度场。替换后的链条：
+
+```
+ComputeLeafLens       叶面两叶的透镜体积 V
+  → th4               填 uvss（两叶坐标）
+  → LocalQuadHessian  对 (u,v) 局部二次拟合 → Hessian H
+  → AB                常 Hessian 只落进 A、B 两个通道
+  → StiffnessProjectionFromH
+```
+
+旧 RBF 函数体原样保留为 `rbf_RBF`，便于 A/B 对照。
+诊断量 `lastTau` / `lastJ` / `lastRatio` 保留。尾部逻辑抽成 `BuildABCD(stiffnessProj, AB_vals, quatGrad)`。
+
+**结论：有了两个标量（叶透镜体积 V + 距离 d）后，不再需要 RBF 去算刚度矩阵。**
+刚度矩阵就是能量的 Hessian，而叶透镜链已经把它解析地给出了。
+
+---
+
+## 阶段 AH：透镜体积闭式与 `g = d/r` 参数化
+
+```
+V = R⁴ · I_x(5/2, 1/2)
+x = 1 − d²/(4R²) = 1 − g²/4
+Phi(g) = [12α − 8 sin2α + sin4α] / (6π),   α = arccos(g/2)
+```
+
+**恒等式来源**：`(1/2)·I_{sin²α}((n+1)/2, 1/2)` 正是 n 维球冠的占比，
+故指数 `(5/2, 1/2)` 对应 **n = 4**：
+
+```
+V = (4/π²) · Vol₄(cap)
+```
+
+**`d` 在 `x` 里精确抵消**：`x = 1 − d²/(4R²) = 1 − g²/4`，20 万样本上残差 9.1e-13。
+
+**小角级数**（α < 0.05 时避免 12α − 8sin2α + sin4α 的灾难性相消）：
+```
+Phi(g) ≈ α⁵(6.4 − 3.0476α² + 0.7111α⁴) / (6π)
+```
+与正则化不完全 Beta 吻合到 **3.6e-11**。
+
+**等价性**：`ComputeAllFeatures` 恒等于 `(d,g) → (I = d/g, V = (d/g)⁴ Φ(g))`，
+验证 `|dI/I| = 0`、`|dV/V| ≤ 6.4e-12`。
+
+### 关键教训：`g = d/r` 才是正确的无量纲参数
+
+与 `g = ‖dJ/ds‖`（s 为锥面半径）一致。**叶片雅可比版的 `g` 在真实 uvs 上完全不可用**：
+
+| 版本 | `g` 范围 | `x` 范围 | `V` |
+|---|---|---|---|
+| 叶片雅可比 `g`（错） | `[112, 11697]` | `[−3.42e7, −3160]` | `V ≡ 0` |
+| `g = d/r`（对） | `[1.421276, 2.000000]` | `[6e-7, 0.495]` | 正常 |
+
+真实 uvs 统计：`Length = 1600`、1 个 NaN、`|uv| ∈ [3.78e-5, 0.3329]`（3.94 dex）、
+`d2 = 44.713528°`、`rp = 51.154373`、`v3 = (-0.0171, 0, 0.9999)`。
+
+### 两叶几何 `NappePair`
+
+```
+A = qs · vs3,   B = qs2 · vs3
+d = ‖B − A‖ = 2r√(1 − (x̂·n)²),   n = normalize(ẑ × v3)
+r = rp · Rs^sin(d2),   φ = θ · sin(d2)
+```
+验证到 1.3e-15。
+
+### 椭圆积分（`sjysjy.cs`）
+
+Carlson 形式，与 scipy 吻合 4.3e-16（k ∈ [0,0.99]，φ ∈ [0,2π]）：
+```
+F(φ,k) = sinφ · R_F(cos²φ, 1 − k²sin²φ, 1)
+E(φ,k) = sinφ · R_F − (k²/3) sin³φ · R_D
+```
+外加准周期约化 `F(φ+nπ) = 2nK + F`、`F(π−φ) = 2K − F`
+（`SolveTFromE` 在 [0,2π] 上二分，**必需**这一步）。
+
+---
+
+## 阶段 AI：两叶几何与 `vss` 的零信息量（负面结果，必须保留）
+
+| 命题 | 结论 | 证据 |
+|---|---|---|
+| `(points1, points2)` 携带逐点信息 | **否**，只是刚体旋转 | Kabsch 残差 1e-16（6 组随机 (v3,vss)）；`d` 跨 5 个 `vss` 与 5 个 `v3` + 真实 PCA `v3` 逐位相同（5.6e-16） |
+| 弦长依赖 `vss` | **否** | `\|ch1\| = 2z2`、`\|ch2\| = z2√5`（因 `V_3 ⊥ v̂`） |
+| 旧透镜场有逐点剖面 | **否**，常剖面，只由 `r[2]` 决定 | 故 `ExtractAngles` 不是"毁掉逐点信息"的元凶 —— 本来就没有 |
+| `vss` 的作用 | **纯平移**第二条弦 | `V_q1 = v_c + vss`、`V_q2 = v_c1 + vss`（1.7e-16） |
+| 抛物线内部点有信息 | **否**，解析冗余 | 100 点全满足 `u = zLength − (zLength/z2²)v²`，残差 1.8e-16；`ComputeBendEnergy` 只用 `start·e2`、`end·e2` |
+| 旧 `d` 是几何距离 | **否**，索引配对 | `e2_1·e2_2 = −1.000000`；且 `d` 随 numPoints 变（100/200/400 → 0.506242/0.503698/0.502436） |
+| 旧路线在真实 uvs 上有效 | **否**，退化 | `g ≡ 2.000001`（`vss = 0` ⟹ `points1` 塌到原点，`ds` = 半弧长 ⟹ `‖dJ/ds‖ = 2`） |
+
+---
+
+## 阶段 AJ：ABCD 四通道
+
+**A、B、C、D 不是四个独立的物理实体**，也不是可单独调节的参数，
+而是外部势梯度在复平面上低阶展开的四个复系数通道：
+
+```
+∂U/∂z = A z + B z̄ + C z² + D z̄² + 高阶项
+```
+
+常 Hessian 的投影是**严格线性**的：
+```
+stiffProj(z) = α z + β z̄
+α = (H_uu + H_vv)/4
+β = (H_uu − H_vv + 2i H_uv)/4
+|α|² − |β|² = det(H)/4
+```
+⇒ **常数部分只落进 A、B，C = D = 0。**
+
+`SelfTestChannels` 实测：`|A−α| = 1.11e-16`、`|B−β| = 7.85e-17`、`|C| = 8.96e-17`、`|D| = 2.55e-17`。
+
+判别量与反演：
+```
+Δ = (B² − 4AC) / (D² − 4BC)
+ratio = (1 + √Δ) / (1 − √Δ)
+τ = log(ratio) / (2πi)
+```
+
+`DeltaIsRational` 用**连分数精确终止**作判据。注意区分：
+- ✅ 正确：「展开成连分数后**有限步终止**」⟹ 有理数
+- ❌ 错误：「在分母界内存在足够好的逼近」⟹ 会把 `√2` 误判为有理
+
+`SelfTestChannels` 实测：`sqrt(2)` → False、`2/3` → True（2/3）、`0.5+0.25i` → False；
+留一法漂移全在 1e-16 量级（尺度 8.958e-1）。
+
+---
+
+## 阶段 AK：仓库结构迁移
+
+**根因**：仓库根是 `Assets/Scripts`（不是工程根），于是
+`Assets/Plugins/MathNet.Numerics.dll`、`Assets/Plugins/Newtonsoft.Json.dll`、
+`Assets/Resources/points.json`、`Packages/`、`ProjectSettings/` **全部在库外、永远不被跟踪**；
+而 git 里仍登记着旧 `DLL.NET/` 的 11 个文件（显示为删除）⟹ clone 下来无法编译。
+
+三层嵌套仓库：`Assets/Scripts/.git`（真）→ `.git/.git`（2.52 MB 完整多余仓库，
+内含 `Simple-simulation` 检出）→ `.git/.git/Simple-simulation/.git`（第三层）。
+删前已验证：无 `objects/info/alternates`、`config` 无 `core.worktree`、refs 只指向自己。
+
+**处理**：
+1. 删 `.git/.git`（2.52 MB）；`.git` 5.89 MB → 5.41 MB；`fsck` 通过
+2. `.git` 上移到工程根，重建索引（`read-tree --empty` + 定向 `add`），406 个文件被识别为 rename（历史不断）
+3. 新增工程根 `.gitignore`：挡住 `Library/`(1.62 GB)、`Temp/`、`obj/`、`Logs/`、`UserSettings/`、`.vs/`(13.6 MB)、手装的 `Packages/*`
+4. 新增工程根 `README.md`
+
+**教训**：`git add -A` 不带 pathspec 会走查整个工作区（`Library` 26,871 个文件）→ 超时；
+改用定向 pathspec（`git add -A -- Assets ProjectSettings ...`）后 **1.8 秒**完成。
+
+---
+
+## 阶段 AL：`dn` / `sx` 的神经网络化
+
+完成品 `python/nn_dn_sx.py`。动机：现状两步都是**硬划分**，不可导，且实测 `rp` 虚高 ~100 倍。
+完整推导与函数表见 **§8.2**。
+
+---
+
+## 8. 函数 ↔ 神经网络对应表（本轮核心）
+
+> 把流程里每个**不可微 / 硬划分**环节逐一映射到网络结构。
+> 这不是类比修辞：每条都给出「原机制 → 网络模块 → 为什么必须这样换 → 验证数据」。
+
+### 8.1 总览
+
+| # | 原机制（C#） | 神经网络对应 | 不可微点 / 动机 |
+|---|---|---|---|
+| 1 | `dn()`：`jj=(int)(360/d2)` 等角扇区 | `SoftSectors(K, kappa)`：K 个可学习扇区中心 + von Mises 软分配 | `(int)` 截断 + 硬扇区边界 |
+| 2 | `sx()`：`prmax = max‖perp(Ap,vcs)‖`、`rp = max_sector prmax` | `soft_max(rho, beta)`（可微上界，恒 ≥ max） | 硬 `max` 梯度只走单点、且断裂 |
+| 3 | `rp` 硬赋值 | `soft_quantile(x, q, τ, iters)`：二分 + 隐函数定理 | 分位数不可导 |
+| 4 | `v3 = normalize(c1−c2)` | `Axis(v3_init)`：so(3) 指数映射参数化 | `normalize` 在 0 处奇点 |
+| 5 | `th2` 输出 `v3`（**y 恒为 0，1 DOF**） | `AxisFromTh2(d2_rad)`：显式还原该耦合（**对照臂**） | 自由度不足 |
+| 6 | 点云 → 柱面半径 | `cylinder_radius(P, v3)` → `ρ_i = ‖perp(p_i, v3)‖` | 把几何输入变成一层观测量 |
+| 7 | 目标：`rp` 小 + 覆盖全部点 | `loss_fn(rho, A, rp, d2, w, scale)` | 覆盖约束由构造保证（§8.2） |
+| 8 | RBF 刚度场 | `ComputeLeafLens → th4 → LocalQuadHessian → StiffnessProjectionFromH` | RBF 核宽是超参、拟合是黑箱 |
+| 9 | 刚度矩阵 = 势能二阶导 | `Hess` / `LocalQuadHessian` = 局部二次型 = **loss landscape 曲率**（≈ Fisher / K-FAC / 二阶优化层） | 显式抽二阶信息，而非留在黑箱里 |
+| 10 | ABCD 四通道 | 势梯度的**低阶多项式基** `[z, z̄, z², z̄²]` | 把黑箱梯度分成 4 个可解释复系数 |
+| 11 | `Δ → τ` 反解 | **解析反演层**（implicit layer）：系数 → 模量 | 无需迭代，闭式可微 |
+| 12 | 有理判据 | 连分数**精确终止**判据 | 判"代数数 vs 超越数" |
+
+### 8.2 `dn` / `sx` 的完整替换
+
+**现状实测（`Resources/points.json`）**
+- `rp = 51.154373`，而点云 `|p|` 中位 ≈ 0.5 → **rp 大了约 100 倍**
+- 经 `MapDoubleConeToLeaf` 后 `|uv|` 中位 9.04e-5、跨 3.94 dex → 点集严重失真
+- 透镜场 `g ∈ [112, 11697] ≫ 2` → `Phi(g) = 0`、`V ≡ 0`
+
+**三个互相拉扯的要求**
+- (a) 覆盖：`rp ≥ max_i ‖perp(p_i, v3)‖`
+- (b) 最小：`rp` 尽量小（锥最紧）
+- (c) 不失真 + 合锥：共形映射后点集不失真，且贴合构造出的圆锥
+
+(b) 要 `rp = max ρ`，(c) 要 `rp = 几何均值 ρ`
+→ **只有把 ρ 的分布变窄才能同时满足**，这正是分组层 (`dn`/`sx`) 的职责，
+也是它**必须可学习而不是固定划分**的理由。
+
+**关键推论**
+```
+覆盖 + 最小  ⇒  rp → soft_max(ρ)
+soft_max(ρ) 依赖 v3
+⇒  最小化 rp  ≡  找一个让柱面半径最小的轴
+```
+这就是"优化 `rp` 会带动 `v3` 自动变化"的**准确含义**。
+
+**函数表**
+
+| 函数 | 作用 | 对应原机制的哪一步 |
+|---|---|---|
+| `hat(w)` / `exp_so3(w)` | 反对称矩阵 / so(3) 指数映射 | 无奇点的轴参数化 |
+| `unit(v, eps)` | 数值安全归一化 | 替代裸 `normalize` |
+| `Axis` | 可学习 `v3`（`nn.Module`） | `v3 = normalize(c1−c2)` |
+| `ortho_frame(v3)` | 由 `v3` 构造正交基 | `yzqx` 坐标系 |
+| `cylinder_radius(P, v3)` | `ρ_i = ‖perp(p_i, v3)‖` | `sx` 里的 `perp(Ap, vcs)` |
+| `soft_max(x, beta)` | 可微上界（恒 ≥ max） | `sx` 的 `prmax` / `rp` 硬 max |
+| `soft_quantile(x, q, tau, iters)` | 可微分位数（二分 + 隐函数定理） | `rp` 硬赋值 |
+| `SoftSectors(K, kappa)` | K 个可学习扇区中心 + von Mises 软分配（用 `(cosθ, sinθ)` 内积，**无分支割线**） | `dn` 的等角扇区 `AngleAxis(i*d2, v3)` |
+| `AxisFromTh2(d2_rad)` | 还原 `th2` 的 1-DOF `v3` 耦合 | `th2` |
+| `loss_fn(rho, A, rp, d2, w, scale)` | soft_max 上界 + 覆盖惩罚 | 新目标函数 |
+| `scan_axis_floor(P, d2, n, beta)` | 4000 轴扫描求 `rp` 经验地板 | 给出可达下界 |
+| `report(tag, ...)` | 三模式对比打印 | 现状 / `v3` 自由 / `v3` 由 `th2` 耦合 |
+
+**已验证数值**（4000 轴扫描）
+
+| 量 | 值 |
+|---|---|
+| `std(log ρ)` 最优轴 | 0.462495 |
+| `std(log ρ)` 最差轴 | 0.742192 |
+| `std(log ρ)` PCA 轴 | 0.589057 |
+| `soft_max(ρ)` 最优轴 | 1.310911 |
+| `1/sin(d2)`（`d2 = 44.713528°`） | 1.1137 |
+| C# `sx` 给出 `rp` | 51.154373 |
+| PCA 轴硬 max `rp` | 1.463559（→ C# 是它的 **35 倍**） |
+
+`points.json` 的 PCA 特征值比 `0.4296 / 0.3216 / 0.2488`（近球形）
+⇒ ρ 的离散度是**内禀的**，不是选轴不当造成的。
+学习到的 `v3` 收敛到地板附近（`rp` 1.4658→1.4195、`ρ_max` 1.4636→1.4042），但**增益很小**。
+
+**两条设计修正记录**
+1. 初版 `soft_max` + 自由 `rp` 的覆盖惩罚会让 `rp/ρ_max = 0.919 < 1`（违反覆盖）
+   → 改为 **`rp = soft_max(rho, BETA)` 由构造保证覆盖**。
+2. `v3.y ≡ 0` 在 `rp = 0.2068 / 0.6893 / 2.0679 / 6.8929` 下均成立
+   → 证实 `th2` 只有 **1 个自由度**（`th2` 的两个输出共享同一 y）。
+
+### 8.3 刚度 → 局部二次型
+
+见 §AG 与 §8.1 第 8–9 行。
+神经网络含义：`H` 是能量函数的 Hessian，即 **loss landscape 的曲率矩阵**；
+这一步等价于网络里的 **Fisher / K-FAC / 二阶优化层**。
+
+### 8.4 ABCD → 低阶可解释基 + 解析反演层
+
+见 §AJ。`τ = log(ratio)/(2πi)` 是**隐式层反解**（形式等同 DEQ 的 implicit layer），
+无需迭代、闭式可微。
+
+---
+
+## 9. 剩余问题（更新，取代 §5 第 1/3 项）
+
+1. ~~模型偏差（0.6 地板）~~：仍是常数，但不阻碍方向对齐（阶段 K）。
+2. **全局搜索策略**：单起点 NM 会困；随机/网格 + 抛光可达 0.0°。仍是开放项。
+3. ~~泛化~~：真实数据 pyjson 已在阶段 AE 逐行对齐复现成功（Unity @80-100 轮读数逐位一致）。
+4. **DEQ 网络化**：`nn_dn_sx.py` 已完成 `dn`/`sx` 一节；下一步是
+   **2D（方位角 × 半径）软分配 + 多锥面 `rp`**，以及把 `dn` 的 `s[i]*r[k]` 缩放显式物化。
+5. **收敛门替代预算**：消除内层 30/50/100 预算敏感。仍未解决。
+6. **`Δ` 是否接入 `legacy/sjy.cs`**：目前 `BuildABCD` 只用 `B²−4AC`，`D` 未用；
+   是否换成 `Δ = (B²−4AC)/(D²−4BC)` 待定。
+7. **两个已知流水线 bug**（未修）：
+   - `BatchProbability` 指数 `−delta²/8·a²` 应为 `/(8a²)`（当前会让 `probs ≡ 0`、`vss = 0`）
+   - `BuildABCD` 尾部 `replaced1.Average()` 在空序列上抛 `InvalidOperationException`
+
+---
+
+## 10. 仓库最终形态与废物核查
+
+**只上传代码结构**：`.py` + `.cs` + `.md` + `.gitignore`。
+
+| 类别 | 处理 |
+|---|---|
+| `.py` 162 个 | 保留（顶层 8 + `experiments/` 16 + `archive/` 138） |
+| `.cs` 11 个 | 保留 |
+| `.md` 6 个 | 保留（根 README、log ×2、`python/README.md`、`experiments/README.md`、`Assets/Scripts/README.md`） |
+| `.meta` 234 个 | 不入库（Unity 自动生成） |
+| `.json` 27 / `.asset` 21 / `.txt` 3 | 不入库（Unity 设置与数据） |
+| `.shader` 5 / `.mat` 4 / `.unity` 1 / `.renderTexture` 1 / `.jpg` 1 / `.png` 1 | 不入库（Unity 资源） |
+| `.dll` 2 | 不入库（第三方二进制） |
+| `.npz` 2 | 不入库（数据集，本地保留） |
+
+**废物文件核查**：已删 `.git/.git`（嵌套仓库 2.52 MB）、空壳 `概率条件/`（只剩一个
+对应已不存在 `.py` 的 `.pyc`）、3 个游离 `__pycache__`、冗余的 `Assets/Scripts/.gitignore`。
+所有 `.meta` 文件**未做批量删除**（Unity GUID 不可再生）。
+
+> **权衡**：不收 `.dll` 与 `points.json` ⟹ clone 后无法直接编译/跑数据，仓库定位为**代码展示**。
+> 若需恢复可编译性，把根 `.gitignore` 里的 `*.dll` / `/Assets/Plugins/` 两条移除并重新 `add` 即可。
+
+---
+
+*§8 的函数↔网络对应表由本仓库的 C#/Python 实现**逐条比对**得出，不是事后类比；
+所有数值均可用 `python/experiments/` 与 `python/nn_dn_sx.py` 复现。*

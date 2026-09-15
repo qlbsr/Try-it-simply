@@ -1,7 +1,7 @@
 # AI 调用与提示词日志（DeepSeek）
 
 > 项目：`C:\Users\23128\My project (2)\Assets\Scripts`
-> 日期：2026-08-29 ~ 2026-08-31
+> 日期：2026-08-29 ~ 2026-09-01
 > 记录方式：本项目所有 AI 辅助开发均通过与 **DeepSeek** 的对话式调用完成
 > （DeepSeek Harness / DSH，模型 `deepseek-v4-flash`）。一次对话轮次 = 一次调用。
 > 本文件记录每次调用的**提示词（精简）**、**输入/输出要点**与**落地改进**，
@@ -42,6 +42,13 @@
 | 16 | 08-31 | 用户澄清：角平分线依旧是指示，但**得到的值已与角平分线无关**（判据仅 \|∠(d,v)−∠(d,F1−F2)\|≤10） | 新增 `experiments/test_no_bisector.py`：变体 B（去 vj 预精化）/ 变体 C（纯 NM 固定参考） | ①**判据与角平分线无关证实**：变体 B 无 vj 同样 4 迭代达成（\|Δ\|=1.50° vs 0.75°）；②**真正必要的是动态参考**：变体 C 固定参考单起点 NM 困（\|Δ\|=58.5°），每轮旋转更新 newv/newF 才让 NM 总能命中零点；③vj 只是引导链一环，非判据非必要条件 | 测试脚本 + 本记录（待提交） |
 | 17 | 08-31 | 用户优化 `SoftMinDistance`：γ 自适应（与点云到格点距离尺度匹配，避免过大梯度消失/过小数值不稳定）；扩展测试 1000+ 点 | 扩展测试 `test_more_points.py`（中途终止：1000 点不收敛系旋转参考追踪问题，非点数）→ 软最小距离 `verify_softmin_gamma.py` | **γ 自适应实现**：γ=γfrac·scale，scale=最近格点间隙（≈格点间距，minDist≈0 时兜底），clamp 到 [1e-6·scale, scale]；单点偏差仅 3e-6，γ→∞ 退化、γ→0 收敛硬 min；软最小在 (t1,t2) 平面连续（硬 min 21 点 20 次跳变）；`ComputeProbabilitiesFromTaus` 加 `useSoftMin` 开关（默认 false 向后兼容） | `C#/n2sjy2.cs`、`C#/nsjy.cs` 两处同步；验证脚本（待提交） |
 | 18 | 08-31 | 用户新终止条件 `\|(angleDeg2+angleDeg1)/2−min\|≤8`（两焦点方向等角，无 PCA），并发现**达成时 s0[0]≈s5[0]** | `verify_s0_s5_relation.py` 完整迭代（pyjson/ellip/ball）| ①**规律成立**：pyjson 达成 \|s0−s5\|=1.56、ball0 0.87、ellip0 6.60、ellip1 未达成（NM 停滞）；②**几何链**：∠(d,v1)≈∠(d,v3)（无PCA）⟹ s0[0]≈s5[0] ⟹ ∠(p0,v)≈∠(p0,d)（三角形反演：v 的 s0=68.8→∠(p0,v)=78.7°）；③**可操作形态**：从 s5[0] 概率值可直接读出"当前方向 p0 视角 = PCA p0 视角"，无需 PCA | 验证脚本 + 本记录（待提交） |
+| 19 | 09-01 | 用户替换 `legacy/sjy.cs` 里的 `rbf`（球面 RBF 刚度场）并运行 | 替换后的 `legacy/sjy.cs`（叶透镜链）+ 编译运行 | ①新链 `ComputeLeafLens`→`th4`→`LocalQuadHessian`→`StiffnessProjectionFromH` 可编译可运行；②`rbf_RBF` τ=+0.406314+0.039100i、\|ratio\|=0.782180、j=8.511e7、8735ms；`rbf` τ=+0.433940+0.156416i、\|ratio\|=0.374265、j=−1.253e7、5059ms；③AB 由常 Hessian 线性投影给出，不需要 RBF 再算刚度矩阵 | `C#/legacy/sjy.cs`（改进 11） |
+| 20 | 09-01 | 问：A,B,C,D 是不是四个独立物理实体？能否满足"势梯度低阶展开"的语义？ | `v2sjy.cs` 新 ABCD 块 | **不是独立实体**，是 `∂U/∂z = Az + Bz̄ + Cz² + Dz̄² + …` 的四个复系数通道；常 Hessian 只落进 A、B：`α=(H_uu+H_vv)/4`、`β=(H_uu−H_vv+2iH_uv)/4`、`\|α\|²−\|β\|²=det(H)/4` ⇒ `SelfTestChannels` 实测 \|C\|=8.96e-17、\|D\|=2.55e-17 | `C#/v2sjy.cs`（改进 12，见 §8.4） |
+| 21 | 09-01 | 把 ABCD 通道语义表 + `Δ=(B²−4AC)/(D²−4BC)` 过程函数写入 `v2sjy` | `v2sjy.cs` | 新增 `Channels`/`FitChannels`/`Lstsq4`(MGS-QR)/`Delta`/`DeltaIsRational`(连分数精确终止)/`RatioFromDelta`/`TauFromDelta`/`Classify`/`LeaveOneOutSpread`/`SelfTestChannels`；留一法漂移全在 1e-16（尺度 8.958e-1）；`sqrt(2)`→False、`2/3`→True | `C#/v2sjy.cs`（改进 12 收尾） |
+| 22 | 09-01 | 问："旧(抛物面) / 新(叶面两叶)"这个位置是什么？抛物线不用采集了吗？→ 是 `MapDoubleConeToLeaf` 得到 uvs 吗？然后两个叶？ | `sjysjy.cs MapDoubleConeToLeaf`、`legacy/sjy.cs` | ①`NappePair` 给出两叶 `A=qs·vs3`、`B=qs2·vs3`，`d=‖B−A‖=2r√(1−(x̂·n)²)`（验证 1.3e-15）；②抛物线内部**解析冗余**：100 点全满足 `u=zLength−(zLength/z2²)v²`（残差 1.8e-16），故不必再采样；③**旧 `d` 不是几何距离而是索引配对**（`e2_1·e2_2=−1.000000`，且随 numPoints 变：100/200/400→0.506242/0.503698/0.502436） | 验证脚本 `verify_parabola_vs_sheets.py`、`verify_leaf_two_sheets.py` |
+| 23 | 09-01 | 数值库全部回退 `Numerics.NET` → `MathNet.Numerics` | 所有 `.cs` | `Numerics.NET` 的 `Matrix<T>`/`Vector<T>` 抛 `LicenseException: Invalid trial key`；回退 44+19+8+13+7+1 处 API（`Matrix.Zeros`→`Build.Dense`、`GetInverse`→`Inverse`、`GetSingularValueDecomposition`→`Svd`、`GetSlice`→`SubVector`、`Vector.Length`→`Count`）；`Complex<T>.I` 无 `ImaginaryOne` 须改回 `Complex.ImaginaryOne`；`sjysjy.cs` 新增自有 `Elliptic` 类替代 `Special.EllipticE` | 全部 `.cs`（改进 13） |
+| 24 | 09-01 | 整理目录、清理 `.git`；把 `.git` 上移到工程根；代码收窄为纯 py/cs | 仓库现状 | ①删除嵌套仓库 `.git\.git`（2.52MB，含第三层）；②仓库根从 `Assets/Scripts` 上移到工程根 → `Assets/Plugins`、`Assets/Resources/points.json`、`ProjectSettings/` 首次可被跟踪（此前 clone 无法编译）；③新增工程根 `.gitignore`（挡住 `Library/` 1.62GB、`.vs/` 13.6MB 等）；④新增工程根 `README.md` | 仓库结构（改进 14） |
+| 25 | 09-01 | 把 `dn`/`sx` 改成可学习/可微模块，让 `rp` 有效 | `legacy/sjy.cs` 的 `dn`/`sx`、`Resources/points.json` | 见 §8.2：`soft_max` 可微上界、`soft_quantile` 隐式微分、`SoftSectors` von Mises 软分配、`Axis` so(3) 参数化；实测 C# `sx` 给 `rp=51.154373` 而 PCA 轴硬 max 仅 1.463559 → **35 倍虚高** | `python/nn_dn_sx.py`（改进 15，见 §8.2） |
 
 ---
 
@@ -63,6 +70,18 @@
 12. "把代码整洁和简化，然后上传仓库。"
 13. "审查 log：AI 调用、提示词、输入输出要明确写入；输出精简。"
 14. "再分析：|Δ|→0 的结果究竟是 LM/NM（优化器）的作用，还是椭圆曲线结构的作用？"
+15. "用户改进 `n2sjy2.cs`：真实数据 pyjson + `vj=v̂+d̂` + 注释掉内层 FitFoci 重拟合 + NM 直接压 |Δ|（stopF=10）。"
+16. "角平分线依旧是指示，但得到的值已与角平分线无关（判据仅 |∠(d,v)−∠(d,F1−F2)|≤10）。"
+17. "优化 `SoftMinDistance`：γ 自适应（与点云到格点距离尺度匹配）。"
+18. "新终止条件 `|(angleDeg2+angleDeg1)/2−min|≤8`（两焦点方向等角，无 PCA），并发现达成时 s0[0]≈s5[0]。"
+19. "把 `legacy/sjy.cs` 里的 `rbf` 替换掉，然后运行给我看结果。"
+20. "在这套公式里，A,B,C,D 不是四个独立的物理实体或可单独调节的参数，而是外部势梯度在复平面上低阶展开后的四个复系数通道：`∂U/∂z = Az + Bz̄ + Cz² + Dz̄² + 高阶项` —— 确认其真的能满足，把那部分的数学公式列出给我看。"
+21. "把这个过程函数写入 `v2sjy`。"（附 A/B/C/D 通道语义表 + `Δ=(B²−4AC)/(D²−4BC)`）
+22. "旧(Vss1 抛物线) / 新(叶面两叶) 这个位置是啥，抛物线不用采集了吗？" → "是 `MapDoubleConeToLeaf` 得到 uvs 吗？然后两个叶？"
+23. "数值库全部回退到 `MathNet.Numerics`。"
+24. "整理目录结构；看 `.git` 这里也整理一下，不知道为什么感觉嵌套了导致上传有问题。"
+25. "先整理目录和 py 文件；生成新的 py 文件，作用就是替换 sx dn 在神经网络的意义。"
+26. "最后整理确认没有废物文件；更新 log 和 md，把 DeepSeek 改进以及函数对应的神经网络部分的信息补充干净；git 只上传代码结构（py 和 c# 逻辑），不要把 Unity 的那些元素算进去。"
 
 ---
 
@@ -94,6 +113,35 @@
 | 9 | 9 | `verify_nsjy5.py` |
 | 11 | （负面结论） | `verify_pca_free.py`、`verify_angle_v_target.py`、`measure_deviation_floor.py` |
 | 12 | 10（仓库整理） | `README.md`、`git log` |
+| 14 | —（结论修正） | `experiments/analyze_optimizer_vs_structure.py` |
+| 15 | 用户改动（n2sjy2 加速） | `experiments/test_n2sjy2_improved.py` |
+| 16 | 用户改动（脱离角平分线） | `experiments/test_no_bisector.py` |
+| 17 | 用户改动（SoftMinDistance γ 自适应） | `experiments/verify_softmin_gamma.py` |
+| 18 | 用户改动（无 PCA 终止条件） | `verify_s0_s5_relation.py` |
+| 19 | 11（RBF → 叶透镜链） | `C#/legacy/sjy.cs` 的 `rbf_RBF` 对照运行 |
+| 20–21 | 12（ABCD 四通道） | `C#/v2sjy.cs` 的 `SelfTestChannels` |
+| 22 | —（几何澄清，负面结果） | `experiments/verify_parabola_vs_sheets.py`、`verify_leaf_two_sheets.py`、`verify_d_vs_vss.py`、`verify_vss1_is_rotation_only.py` |
+| 23 | 13（数值库回退） | `mathnet_check` 编译（0 error / 3 warning）+ `mathnet_run` 端到端 |
+| 24 | 14（仓库结构） | `git fsck`、`git check-ignore`、`git ls-files` |
+| 25 | 15（dn/sx 网络化） | `python/nn_dn_sx.py` 三模式 `report` + `scan_axis_floor` |
+
+---
+
+## 5. 本轮（09-01）补充记录的定位说明
+
+轮次 19–25 的详细技术内容不在本文件展开，而是分节写入
+`nsjy_pipeline_analysis.md`：
+
+| 轮次 | 对应日志分节 |
+|---|---|
+| 19 | 阶段 AF（数值库回退）、阶段 AG（RBF 被叶透镜链替换） |
+| 20–21 | 阶段 AJ（ABCD 四通道）、§8.4 |
+| 22 | 阶段 AI（两叶几何与 `vss` 的零信息量） |
+| 23 | 阶段 AF |
+| 24 | 阶段 AK（仓库结构迁移）、§10（废物核查） |
+| 25 | 阶段 AL、**§8.2**（`dn`/`sx` 的完整替换） |
+
+> **总入口**：函数 ↔ 神经网络对应表见 `nsjy_pipeline_analysis.md` 的 **§8**。
 
 ---
 

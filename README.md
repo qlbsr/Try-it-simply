@@ -76,4 +76,42 @@ ProjectSettings/                Unity 工程设置
 | `g = d/r` 是正确的无量纲参数 | 与 `g = ‖dJ/ds‖`（s = 锥面半径）一致；叶片雅可比版 `g` 在真实 uvs 上是 `[112, 11697]`，不可用 |
 | ABCD 不是四个独立物理量 | 是外部势梯度在复平面低阶展开的四个复系数通道 `∂U/∂z = Az + Bz̄ + Cz² + Dz̄² + …`；常 Hessian 部分只落进 A、B，C=D=0 到机器精度 |
 
-> 详细推导与验证过程见 `Assets/Scripts/log/nsjy_pipeline_analysis.md`。
+## 函数 ↔ 神经网络对应（可微化主线）
+
+整套流程里的每个**不可微 / 硬划分**环节，都已映射到对应的网络结构。
+完整版（含验证数据）见 [`log/nsjy_pipeline_analysis.md`](Assets/Scripts/log/nsjy_pipeline_analysis.md) 第 8 节。
+
+| 原机制（C#） | 神经网络对应 | 不可微点 |
+|---|---|---|
+| `dn()`：`jj=(int)(360/d2)` 等角扇区 | `SoftSectors(K, kappa)`：K 个可学习扇区中心 + von Mises 软分配 | `(int)` 截断 + 硬边界 |
+| `sx()`：`prmax=max‖perp(Ap,vcs)‖`、`rp=max_sector prmax` | `soft_max(rho, beta)` 可微上界（恒 ≥ max） | 硬 `max` 梯度走单点、断裂 |
+| `rp` 硬赋值 | `soft_quantile(x,q,τ)`：二分 + 隐函数定理 | 分位数不可导 |
+| `v3 = normalize(c1−c2)` | `Axis`：so(3) 指数映射参数化 | `normalize` 在 0 处奇点 |
+| `th2` 输出 v3（**y 恒为 0，1 DOF**） | `AxisFromTh2`：显式还原该耦合（对照臂） | 自由度不足 |
+| RBF 刚度场 | `ComputeLeafLens → LocalQuadHessian → StiffnessProjectionFromH` | RBF 核宽是超参、拟合是黑箱 |
+| 刚度矩阵 = 势能二阶导 | 局部二次型 = **loss landscape 曲率**（≈ Fisher / K-FAC 层） | — |
+| ABCD 四通道 | 势梯度的**低阶多项式基** `[z, z̄, z², z̄²]` | 把黑箱梯度分成 4 个可解释复系数 |
+| `Δ → τ` 反解 | **解析反演层**（implicit layer） | 无需迭代，闭式可微 |
+
+### `dn` / `sx` 替换的核心推理
+
+实测（`points.json`）：`rp = 51.154373`，而点云 `|p|` 中位 ≈ 0.5 → **rp 虚高约 100 倍**；
+经 `MapDoubleConeToLeaf` 后 `|uv|` 中位 9.04e-5、跨 3.94 dex → 点集严重失真；
+透镜场 `g ∈ [112, 11697] ≫ 2` → `Phi(g)=0`、`V ≡ 0`。
+
+三个要求互相拉扯：**(a) 覆盖** `rp ≥ max ρ`、**(b) 最小** `rp`、(c) 不失真且合锥。
+(b) 要 `rp = max ρ`，(c) 要 `rp = 几何均值 ρ` → **只有把 ρ 的分布变窄才能同时满足**，
+这正是分组层（`dn`/`sx`）的职责，也是它必须**可学习**而非固定划分的理由。
+
+关键推论：**覆盖 + 最小 ⇒ `rp → soft_max(ρ)`，而 `soft_max(ρ)` 依赖 `v3`**
+⇒ "最小化 rp" 等价于 "找一个让柱面半径最小的轴" ——
+这就是"优化 rp 会带动 v3 自动变化"的准确含义。
+
+`points.json` 的 PCA 特征值比 `0.4296 / 0.3216 / 0.2488`（近球形）⇒ ρ 的离散度是**内禀的**；
+4000 轴扫描给出 `std(log ρ)` 最优 0.462495 / 最差 0.742192 / PCA 轴 0.589057，
+`soft_max(ρ)` 最优 1.310911，而 C# `sx` 给出 51.15（是 PCA 轴硬 max 1.463559 的 **35 倍**）。
+
+> `Δ = (B² − 4AC)/(D² − 4BC)`、`ratio = (1+√Δ)/(1−√Δ)`、`τ = log(ratio)/(2πi)`；
+> `DeltaIsRational` 用**连分数精确终止**判"代数数 vs 超越数"，不是"分母界内能较好逼近"（后者会把 √2 误判为有理）。
+
+> 详细推导与验证过程见 [`Assets/Scripts/log/nsjy_pipeline_analysis.md`](Assets/Scripts/log/nsjy_pipeline_analysis.md)。

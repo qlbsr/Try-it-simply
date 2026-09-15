@@ -1,9 +1,12 @@
 # ===============================================================
 #  Unity 工程根 .gitignore
-#  repo root = 工程根 "My project (2)"   (2025 迁移: 原根为 Assets/Scripts)
+#  repo root = 工程根 "My project (2)"
+#
+#  仓库定位：只收【代码】.py / .cs 与【文档】.md
+#  其余 Unity 元素、第三方二进制、数据集、缓存一律不入库
 # ===============================================================
 
-# ---- Unity 自动生成 / 缓存: 绝对不要提交 ----
+# ---- Unity 自动生成 / 缓存 ----
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
@@ -14,15 +17,47 @@
 /[Rr]ecordings/
 /[Uu]serSettings/
 
-# Unity 崩溃报告
-sysinfo.txt
-crashlytics-build.properties
+# ---- Unity 工程元素 ----
+/ProjectSettings/
+/Packages/
+/Assets/Scenes/
+/Assets/Resources/
+/Assets/Plugins/
+/Assets/StreamingAssets/
+/Assets/AssetStoreTools/
+*.meta
+*.unity
+*.mat
+*.renderTexture
+*.shader
+*.asset
+*.prefab
+*.controller
+*.anim
+*.cubemap
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.tga
+*.psd
+*.wav
+*.mp3
+*.fbx
 
-# ---- Packages: 只跟踪 manifest / lock, 本地手装的包目录不提交 ----
-# (Packages/ 里是 179 MB 手装 NuGet 解包, 未被 manifest.json 引用)
-/Packages/*
-!/Packages/manifest.json
-!/Packages/packages-lock.json
+# ---- 第三方二进制 ----
+*.dll
+*.so
+*.dylib
+*.pdb
+*.mdb
+
+# ---- 数据 / 记录（本地保留，不入库）----
+*.json
+*.txt
+*.npz
+*.npy
+*.csv
 
 # ---- IDE / 编辑器 ----
 /.vs/
@@ -38,13 +73,9 @@ crashlytics-build.properties
 *.pidb
 *.booproj
 *.svd
-*.pdb
-*.mdb
 *.opendb
 *.VC.db
 *.sln.DotSettings.user
-
-# ---- VS / NuGet 残留 (仅 IDE 生成, Unity 不需要) ----
 /app.config
 /packages.config
 
