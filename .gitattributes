@@ -1,0 +1,19 @@
+# 统一行尾策略：仓库内一律 LF
+#
+# 起因：Windows 上 Git for Windows 的系统级 gitconfig 设了 core.autocrlf=true，
+# 而本仓库的 blob 里存的都是 LF。git 于是把工作区里 LF 的文件统统标记为"已修改"
+# （131 个假修改），git diff 却是空的 —— GitHub Desktop 用 status 渲染列表，
+# 会显示一大堆并不存在的改动。
+#
+# 这里用显式的 per-path 属性取代对 autocrlf 的依赖：
+#   text=auto  -> 提交时把 CRLF 归一化成 LF
+#   eol=lf     -> 检出时保持 LF，工作区与 blob 逐字节一致，status 永远干净
+
+* text=auto eol=lf
+
+# 明确标记为二进制，永不参与行尾转换
+*.dll  binary
+*.npz  binary
+*.png  binary
+*.jpg  binary
+*.renderTexture binary
