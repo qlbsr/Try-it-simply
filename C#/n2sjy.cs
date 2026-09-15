@@ -1,12 +1,10 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using UnityEngine;
-using static alglib;
 using Vector3 = UnityEngine.Vector3;
-
+using Complex = System.Numerics.Complex;
 public class n2sjy : MonoBehaviour
 {
     public Complex[] r45;

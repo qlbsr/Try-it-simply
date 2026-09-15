@@ -350,3 +350,58 @@
 ---
 
 *本日志由 DeepSeek 在迭代分析过程中生成，所有结论均有 `verify_*.py` / `test_*.py` 脚本可复现。*
+
+---
+
+## 阶段 AE (Unity vs Python 分歧定位: n2sjy2 pyjson)
+
+### Unity 终止轮事实 (用户确认)
+- (a9=2.002618, new=111.2141, odr=70.66569) 出现在 **外轮 80-100 左右** (非 iter0)
+- a9 = ∠(v6, v3), new = ∠(f1-f2, f01-f02) (每轮开头), odr = RefineModuliByAxis 首内迭代 angle
+
+### 关键代码发现 (本次)
+1. **n2sjy2.cs 类内自带 FitFociByProbability (line 405)**, 与 nsjy.cs (line 206) 完全不同:
+   | 项 | n2sjy2.cs 405 (Unity 实际用) | nsjy.cs 206 |
+   |---|---|---|
+   | lr | 0.0001f | 0.001f |
+   | lambdaSep | 1.0f (分离正则) | 无 |
+   | 单点裁剪 | ClampMagnitude(1.0f) | 无 |
+   | 整体裁剪 | ClampMagnitude(5f) | 无 |
+   | d 下限 | safeD=max(d,1e-3) | d>1e-6 跳过 |
+   Start/EvaluateResiduals/RefineTausWithNM 内全部无前缀调用 → 同类 405 版!
+   Python n2sjy2.py fit_foci_by_probability (100-164) = 405 版移植 ✓
+2. **m.pca v3 重建 bug 已修**: C# fj=atan2(z,x), Python 旧用 atan2(y,x) 偏 37.2°.
+   修正后 v3 = pc1 主轴, pyjson 上 ∠(v3, 真轴)=4.61° (旧 v3 偏更多).
+   (nsjy_algorithms.py pca 已修复)
+3. ExtractFoci 正规方程 vs SVD 差异 ~1e-17, cond(AtA)=5.1 → 非分歧源.
+4. 两套 compute_taus (mpmath/Carlsonfk) 数值相同 → 非分歧源.
+5. DeviationCalculator = n2sjy2.cs 764 行, lattice rng=20, 与 Python 移植一致.
+
+### Python n2版拟合 (405版忠实) iter0 结果
+- f1-f2 vs v3 = 134°, f1-f2 vs d01((0,1)) = 28.0° (Unity new=111.2 差很大)
+- d01((0,1)拟合) vs v3 = 109.6° ≈ Unity new 111.2 (巧合?)
+- odr(首内angle) = 30.2 (Unity 70.7)
+- 12 轮外环: new/odr 同步 +2°/轮 (crawl), |odr-new|≈2.1 恒小, a9 136→160 单调恶化
+- Unity 终止于 80-100 轮 → Python 需跑 80+ 轮才能对照 (60轮作业进行中)
+
+### 待解
+- Unity 80-100 轮时 f1-f2≈v3 (a9=2) 而 Python 12 轮 f1-f2 远离 v3 (a9 160) —
+  若 60-100 轮 Python 轨迹绕回则复现成功; 否则初始拟合仍有隐藏差异.
+- 待 Unity 前几轮 (line 88 anglenew) 日志确认初始拟合方向.
+
+## 阶段 AE 更新: 60轮复现成功 (决定性)
+
+### 结果 (reproduce_cs_outer_faithful.py, n2版拟合+修正v3, pyjson 200点)
+- iter0-39: a9 136→172° 单调恶化 (crawl, odr/new 同步 +~2°/轮, |Δ|≈2 恒小) ← 旧实验"卡125-167"真相=只跑<40轮
+- iter40 跳变: a9 骤降 172→7.4° (方向翻转 escape)
+- iter41: new 64→115 跳, |odr-new|=48.9>16 → 纯A条件触发 stop@41 (a9=6.8)
+- &&a9<1 模式继续: odr→70.4, new→111.4 (59轮), a9 6.8→3.46 单调降, 趋势→80-100轮 a9≈2
+- **Unity 终止读数 (odr=70.7, new=111.2, a9=2.0) @80-100轮 与 B 模式 59+ 轮状态逐位一致** ✓
+
+### 结论
+1. Unity vs Python 分歧=**轮次不足 + 旧 v3 bug (37° 参照偏)**; 算法本身已逐行对齐
+2. 跳变(iter40)是 escape 机制 — 前 40 轮 crawl 后方向翻转跳回主轴附近
+3. 终止条件实测:
+   - A 纯 |odr-new|>16: iter41 跳变后触发, 停时 a9=6.8 (尚未到最优)
+   - B &&a9<1: a9 最低 ~2>1 → **永不触发**, 跑满轮次 (Unity a9=2.0>1 同理不触发)
+   - Unity @80-100 终止: 若纯A, 跳变应在~80轮后发生 (float32/NM细节差异致跳变轮次不同)

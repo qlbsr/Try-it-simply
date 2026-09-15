@@ -410,7 +410,7 @@ def refine_moduli_by_axis(pts, r30, r45, a, t10, t20, pca_axis,
 # ========== 主流程示例 ==========
 
 if __name__ == "__main__":
-    np.random.seed(10)
+    np.random.seed(12)
     points = np.random.uniform(-1, 1, (200, 3))
 
     rp = compute_rp(points)
@@ -465,5 +465,6 @@ if __name__ == "__main__":
         # 更新变量
         f1, f2 = f1_new, f2_new
         t1, t2 = t1_new, t2_new
+        if math.isclose(angle1, angle_pca, abs_tol=16):break
 
         print(f"iter {i}: angle1={angle1:.2f}°, angle_pca={angle_pca:.2f}°")

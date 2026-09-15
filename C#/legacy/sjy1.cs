@@ -1,21 +1,14 @@
-using MathNet.Numerics;
-using MathNet.Numerics.Distributions;
-using MathNet.Numerics.LinearAlgebra;
-using MathNet.Numerics.LinearAlgebra.Double;
-using MathNet.Numerics.RootFinding;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using System.Numerics;
-using Unity.VisualScripting;
 using UnityEngine;
-using static UnityEngine.EventSystems.EventTrigger;
-using static UnityEngine.GraphicsBuffer;
-using Quaternion = UnityEngine.Quaternion;
 using Vector2 = UnityEngine.Vector2;
 using Vector3 = UnityEngine.Vector3;
 using Vector4 = UnityEngine.Vector4;
+using MathNet.Numerics.LinearAlgebra;
 
 
 public class jdx {
@@ -200,7 +193,7 @@ public class jdx {
 }
 public class SphericalRBF
 {
-    private MathNet.Numerics.LinearAlgebra.Vector<double> weights;  // 权重 w
+    private Vector<double> weights;  // 权重 w
     private double c0;                       // 常数项（偏置）
     private Vector4[] centers;               // 中心点（训练点 X）
     private double sigma;                    // 角度带宽（弧度）
@@ -227,19 +220,21 @@ public class SphericalRBF
     }
 
     // 求解带常数项的线性系统 (K + λI) w + c0 = delta
-    private static (MathNet.Numerics.LinearAlgebra.Vector<double> w, double c0) Solve(
+    private static (Vector<double> w, double c0) Solve(
         Vector4[] X, double[] delta, double sigma, double lambda)
     {
         int N = X.Length;
-        var K = Matrix<double>.Build.Dense(N, N);
+        
+        var K = Matrix<double>.Build.Dense(N,N);
+       
         for (int i = 0; i < N; i++)
             for (int j = 0; j < N; j++)
                 K[i, j] = Kernel(X[i], X[j], sigma);
 
         int M = N + 1;
-        var A = Matrix<double>.Build.Dense(M, M);
-        var b = MathNet.Numerics.LinearAlgebra.Vector<double>.Build.Dense(M);
 
+        var A = Matrix<double>.Build.Dense(M, M);
+        var b = Vector<double>.Build.Dense(M);
         for (int i = 0; i < N; i++)
         {
             for (int j = 0; j < N; j++)
@@ -254,14 +249,14 @@ public class SphericalRBF
             b[i] = delta[i];
 
         var sol = A.Solve(b);
-        var w = sol.SubVector(0, N);
+        var w = sol.SubVector(0, N);   // MathNet: 参数是 (起点, 个数); 原来 GetSlice(0, N-1) 也是 N 个
         double c0 = sol[N];
         return (w, c0);
     }
 
     // GCV 评分（用于自动选择参数）
     private static double ComputeGCV(Vector4[] X, double[] delta,
-                                     double sigma, double lambda)
+                                  double sigma, double lambda)
     {
         int N = X.Length;
         var (w, c0) = Solve(X, delta, sigma, lambda);
@@ -283,14 +278,31 @@ public class SphericalRBF
         }
         mse /= N;
 
+        // 1. 构建核矩阵 K
         var K = Matrix<double>.Build.Dense(N, N);
         for (int i = 0; i < N; i++)
             for (int j = 0; j < N; j++)
                 K[i, j] = Kernel(X[i], X[j], sigma);
 
-        var A = K + lambda * Matrix<double>.Build.DenseIdentity(N);
+        // 2. 构建 A = K + lambda * I（手动加单位矩阵）
+        var A = Matrix<double>.Build.Dense(N, N);
+        for (int i = 0; i < N; i++)
+            for (int j = 0; j < N; j++)
+                A[i, j] = K[i, j] + (i == j ? lambda : 0.0);
+
+        // 3. 求 A 的逆（或直接求解）
+        //    Numerics.NET 用 GetInverse()，若不存在则用 LU 分解
         var invA = A.Inverse();
-        double traceS = (invA * K).Trace();
+
+        // 4. 计算 trace(invA * K)
+        //    因为 A = K + lambda*I，所以 invA*K = I - lambda*invA
+        //    trace(invA*K) = N - lambda * trace(invA)
+        double traceInvA = 0.0;
+        for (int i = 0; i < N; i++)
+            traceInvA += invA[i, i];
+
+        double traceS = N - lambda * traceInvA;
+
         double denom = (1.0 - traceS / N);
         denom *= denom;
         if (denom < 1e-12) return double.MaxValue;
@@ -342,7 +354,7 @@ public class SphericalRBF
     public double Sigma => sigma;
     public double Lambda => lambda;
     public double[] GetWeights() => weights.ToArray();
-    public MathNet.Numerics.LinearAlgebra.Vector<double> Weights => weights;
+    public Vector<double> Weights => weights;
 }
 
 
@@ -520,195 +532,107 @@ public static class LocalLensVolumeExtractor
         return Math.Sqrt(2.0 * Math.PI) * Math.Pow(t, x + 0.5) * Math.Exp(-t) * a;
     }
 }
-public static class ComplexAngleSolver
-    {
-        // -----------------------------------------------------------
-        // 复数三角函数（System.Numerics.Complex 已提供 Sin, Cos, Tan 等）
-        // 但缺少 Cot, Acot 和 Atan 的某些形式，这里补全
-        // -----------------------------------------------------------
-        public static Complex Cot(Complex z) => Complex.Cos(z) / Complex.Sin(z);
 
-        public static Complex Acot(Complex z) => Complex.Atan(1.0 / z); // 主值
 
-        // -----------------------------------------------------------
-        // 方程左边的复数版本
-        // F(θ) = 4*[Atan(π sinα / sinθ)]² + 4π² sin²α * cot²θ - cos²α
-        // -----------------------------------------------------------
-        public static Complex Equation(Complex theta, double alpha)
-        {
-            double sinAlpha = Math.Sin(alpha);
-            double cosAlpha = Math.Cos(alpha);
-            double target = cosAlpha * cosAlpha;
-
-            Complex sinTheta = Complex.Sin(theta);
-            Complex cotTheta = Cot(theta);
-
-            Complex arg = Math.PI * sinAlpha / sinTheta;
-            Complex atanVal = Complex.Atan(arg);          // 主值
-
-            Complex left = 4.0 * atanVal * atanVal
-                         + 4.0 * Math.PI * Math.PI * sinAlpha * sinAlpha * cotTheta * cotTheta;
-
-            return left - target;
-        }
-
-        // -----------------------------------------------------------
-        // 数值导数（中心差分）
-        // -----------------------------------------------------------
-        public static Complex Derivative(Func<Complex, Complex> f, Complex z, double h = 1e-6)
-        {
-            return (f(z + h) - f(z - h)) / (2.0 * h);
-        }
-
-        // -----------------------------------------------------------
-        // 牛顿法求复数根
-        // initialGuess: 初始猜测
-        // alpha: 实参数 α (弧度)
-        // maxIter: 最大迭代次数
-        // tolerance: 收敛容限
-        // -----------------------------------------------------------
-        public static Complex NewtonSolve(Complex initialGuess, double alpha,
-                                           int maxIter = 100, double tolerance = 1e-10)
-        {
-            Complex theta = initialGuess;
-            for (int k = 0; k < maxIter; k++)
-            {
-                Complex f = Equation(theta, alpha);
-                Complex df = Derivative(t => Equation(t, alpha), theta, 1e-8);
-
-                if (Complex.Abs(df) < 1e-14) break;   // 导数过小，避免除零
-
-                Complex delta = f / df;
-                theta -= delta;
-
-                if (Complex.Abs(delta) < tolerance)
-                    return theta;
-            }
-            return theta; // 返回近似解
-        }
-
-        // -----------------------------------------------------------
-        // 方便调用的方法：输入 α (弧度)，返回可能的复数解列表
-        // -----------------------------------------------------------
-        public static List<Complex> FindSolutions(double alpha, int numGuesses = 5)
-        {
-            var solutions = new List<Complex>();
-            // 几个常见初始猜测：实轴、虚轴、45° 等
-            Complex[] guesses = new Complex[]
-            {
-            new Complex(Math.PI / 4, 0),          // 45°
-            new Complex(Math.PI / 2, 0),          // 90°
-            new Complex(0, 1),                    // 纯虚
-            new Complex(0, -1),
-            new Complex(Math.PI / 4, 1),
-            new Complex(Math.PI / 4, -1),
-            new Complex(-Math.PI / 4, 0),
-            new Complex(-Math.PI / 4, 1),
-            };
-
-            foreach (var guess in guesses)
-            {
-                Complex root = NewtonSolve(guess, alpha);
-                // 去重（简单检查）
-                bool isNew = true;
-                foreach (var sol in solutions)
-                    if (Complex.Abs(root - sol) < 1e-6)
-                    { isNew = false; break; }
-                if (isNew && !double.IsNaN(root.Real) && !double.IsNaN(root.Imaginary))
-                    solutions.Add(root);
-            }
-            return solutions;
-        }
-    }
 public class PCAScikitLearn
 {
     public Matrix<double> Components { get; private set; }
-    public MathNet.Numerics.LinearAlgebra.Vector<double> ExplainedVariance { get; private set; }
-    public MathNet.Numerics.LinearAlgebra.Vector<double> ExplainedVarianceRatio { get; private set; }
-    public MathNet.Numerics.LinearAlgebra.Vector<double> Mean { get; private set; }
-    public MathNet.Numerics.LinearAlgebra.Vector<double> SingularValues { get; private set; }
+    public Vector<double> ExplainedVariance { get; private set; }
+    public Vector<double> ExplainedVarianceRatio { get; private set; }
+    public Vector<double> Mean { get; private set; }
+    public Vector<double> SingularValues { get; private set; }
 
     public void Fit(Matrix<double> X, int nComponents)
     {
         int n = X.RowCount;
         int dim = X.ColumnCount;
 
-        // ========== 1. 手动计算每列均值（替代 ColumnMeans） ==========
+        // ========== 1. 列均值 ==========
         Mean = ComputeColumnMeans(X);
 
-        // 创建均值行矩
-        // 中心化
-        var meanMatrix = DenseMatrix.Create(n, dim, (i, j) => Mean[j]);
-        var X_centered = X - meanMatrix;
+        // ========== 2. 中心化 ==========
+        var X_centered = Matrix<double>.Build.Dense(n, dim);
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < dim; j++)
+                X_centered[i, j] = X[i, j] - Mean[j];
 
+        // ========== 3. SVD ==========
+        var svd = X_centered.Svd();
 
-        // ========== 2. SVD 分解 ==========
-        var svd = X_centered.Svd(true);
+        var S = svd.S;                       // 奇异值向量
+        var V = svd.VT;                      // MathNet 给的是 V 的转置, 形状 dim × dim
 
-        // ========== 3. 取前 nComponents 个 ==========
-        var S = svd.S;
-        var Vt = svd.VT;
-
-        Components = Vt.SubMatrix(0, nComponents, 0, Vt.ColumnCount);
-        SingularValues = MathNet.Numerics.LinearAlgebra.Vector<double>.Build.DenseOfEnumerable(S.Take(nComponents));
-
-        // ========== 4. 计算解释方差 ==========
-        var explainedVarianceArray = new double[nComponents];
+        // ========== 4. 取前 nComponents 个主成分 ==========
+        // Components 的每一行是一个主成分方向; VT 的第 i 行就是第 i 个主成分
+        Components = Matrix<double>.Build.Dense(nComponents, dim);
         for (int i = 0; i < nComponents; i++)
-        {
-            explainedVarianceArray[i] = (S[i] * S[i]) / (n - 1);
-        }
-        ExplainedVariance = MathNet.Numerics.LinearAlgebra.Vector<double>.Build.Dense(explainedVarianceArray);
+            for (int j = 0; j < dim; j++)
+                Components[i, j] = V[i, j];   // VT[i,j] = V_orig[j,i]
 
-        // ========== 5. 手动计算总方差（替代 Sum） ==========
+        // ========== 5. 奇异值 ==========
+        SingularValues = Vector<double>.Build.Dense(nComponents);
+        for (int i = 0; i < nComponents; i++)
+            SingularValues[i] = S[i];
+
+        // ========== 6. 解释方差 ==========
+        ExplainedVariance = Vector<double>.Build.Dense(nComponents);
+        for (int i = 0; i < nComponents; i++)
+            ExplainedVariance[i] = (S[i] * S[i]) / (n - 1);
+
+        // ========== 7. 方差比 ==========
         double totalVar = ComputeSum(ExplainedVariance);
-
-        // 6. 计算方差比
-        var ratioArray = new double[nComponents];
+        ExplainedVarianceRatio = Vector<double>.Build.Dense(nComponents);
         for (int i = 0; i < nComponents; i++)
-        {
-            ratioArray[i] = explainedVarianceArray[i] / totalVar;
-        }
-        ExplainedVarianceRatio = MathNet.Numerics.LinearAlgebra.Vector<double>.Build.Dense(ratioArray);
+            ExplainedVarianceRatio[i] = ExplainedVariance[i] / totalVar;
     }
 
     public Matrix<double> Transform(Matrix<double> X)
     {
         int n = X.RowCount;
         int dim = X.ColumnCount;
-        var meanRow = DenseMatrix.Create(n, dim, (i, j) => Mean[j]);
-        var X_centered = X - meanRow;
-        return X_centered * Components.Transpose();
+
+        // 中心化
+        var X_centered = Matrix<double>.Build.Dense(n, dim);
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < dim; j++)
+                X_centered[i, j] = X[i, j] - Mean[j];
+
+        // X_centered * Components^T
+        var result = Matrix<double>.Build.Dense(n, Components.RowCount);
+        for (int i = 0; i < n; i++)
+            for (int k = 0; k < Components.RowCount; k++)
+            {
+                double sum = 0.0;
+                for (int j = 0; j < dim; j++)
+                    sum += X_centered[i, j] * Components[k, j];
+                result[i, k] = sum;
+            }
+        return result;
     }
 
-    // ========== 手动实现 ColumnMeans（不需要 Linq） ==========
-    private MathNet.Numerics.LinearAlgebra.Vector<double> ComputeColumnMeans(Matrix<double> matrix)
+    // ========== 手动实现列均值 ==========
+    private Vector<double> ComputeColumnMeans(Matrix<double> matrix)
     {
         int rows = matrix.RowCount;
         int cols = matrix.ColumnCount;
-        double[] means = new double[cols];
+        var means = Vector<double>.Build.Dense(cols);
 
         for (int j = 0; j < cols; j++)
         {
             double sum = 0;
             for (int i = 0; i < rows; i++)
-            {
                 sum += matrix[i, j];
-            }
             means[j] = sum / rows;
         }
-
-        return MathNet.Numerics.LinearAlgebra.Vector<double>.Build.Dense(means);
+        return means;
     }
 
-    // ========== 手动实现 Sum（不需要 Linq） ==========
-    private double ComputeSum(MathNet.Numerics.LinearAlgebra.Vector<double> vector)
+    // ========== 手动实现 Sum ==========
+    private double ComputeSum(Vector<double> vector)
     {
         double sum = 0;
-        for (int i = 0; i < vector.Count; i++)
-        {
+        for (int i = 0; i < vector.Count; i++)   // MathNet 的 Vector<T> 用 Count
             sum += vector[i];
-        }
         return sum;
     }
 }
@@ -804,6 +728,20 @@ public class GeometricRationalDetector
 }
 public static class JsonVectorParser
 {
+    public static void SavePoints(List<Vector3> points, string filename)
+    {
+        // 转换为嵌套浮点列表
+        List<List<float>> data = new List<List<float>>();
+        foreach (Vector3 p in points)
+        {
+            data.Add(new List<float> { p.x, p.y, p.z });
+        }
+
+        string json = JsonConvert.SerializeObject(data, Formatting.Indented);
+        string path = Path.Combine(Application.persistentDataPath, filename + ".json");
+        File.WriteAllText(path, json);
+        Debug.Log($"点集已保存至 {path}");
+    }
     public static object ParseVector(JObject obj)
     {
         var keys = new HashSet<string>(obj.Properties().Select(p => p.Name));
@@ -871,31 +809,42 @@ public static class JsonVectorParser
         VectorList relist = new VectorList();
         foreach (var item in jArray)  // item 是 JToken 类型
         {
-            JObject obj = (JObject)item;  // 需要强制转换，因为 item 是 JToken
-            object result = JsonVectorParser.ParseVector(obj);
-            if (result is Vector2 v2)
+            if (item is JArray arr)  // 当前数据是三维坐标数组
             {
-                relist.Vector2List.Add(v2);
+                float x = (float)arr[0];
+                float y = (float)arr[1];
+                float z = (float)arr[2];
+                relist.Vector3List.Add(new Vector3(x, y, z));
             }
-            else if (result is Vector3 v3)
+            else // 如果是对象，按原逻辑
             {
-                relist.Vector3List.Add(v3);
-            }
-            else if (result is Vector4 v4)
-            {
-                relist.Vector4List.Add(v4);
-            }
-            else if (result is Vector5 v5)
-            {
-                relist.Vector5List.Add(v5);
-            }
-            else if (result is Vector6 v6)
-            {
-                relist.Vector6List.Add(v6);
-            }
-            else
-            {
-                Debug.LogWarning("无法识别的类型");
+                JObject obj = (JObject)item; 
+               object result = ParseVector(obj);
+
+                if (result is Vector2 v2)
+                {
+                    relist.Vector2List.Add(v2);
+                }
+                else if (result is Vector3 v3)
+                {
+                    relist.Vector3List.Add(v3);
+                }
+                else if (result is Vector4 v4)
+                {
+                    relist.Vector4List.Add(v4);
+                }
+                else if (result is Vector5 v5)
+                {
+                    relist.Vector5List.Add(v5);
+                }
+                else if (result is Vector6 v6)
+                {
+                    relist.Vector6List.Add(v6);
+                }
+                else
+                {
+                    Debug.LogWarning("无法识别的类型");
+                }
             }
         }
         return relist;

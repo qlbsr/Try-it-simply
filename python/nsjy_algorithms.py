@@ -294,7 +294,13 @@ def compute_taus():
 
 def pca(points):
     """返回 (pc1, v3, explained_variance_ratio)。
-    v3 是 C# pca() 返回的"重建向量"；建议闭环直接用 pc1。"""
+    v3 是 C# pca() 返回的"重建向量"。
+
+    2025-06 修正: C# (用户贴的 n2sjy2.cs pca) 为
+        fj = atan2(pc1.z, pc1.x);  d2 = acos(pc1.y)
+        v3 = (sin d2 cos fj, cos d2, sin d2 sin fj)
+    此重建恰好还原 pc1。旧版误用 fj=atan2(pc1[1],pc1[0])(y/x) 偏 ~37°。
+    注意: 球坐标重建本身有符号歧义, C# 直接照抄 (含其偶发的不一致性)。"""
     X = np.asarray(points, dtype=float)
     n = len(X)
     Xc = X - X.mean(axis=0)
@@ -304,9 +310,9 @@ def pca(points):
     pc1 = evecs[:, order[0]]
     explained = evals[order] / evals.sum()
 
-    # C# 里的 v3 重建(带 Acos/Atan2 的别扭写法, 等价于从球坐标重建)
-    fj = math.atan2(pc1[1], pc1[0])
-    d2 = math.acos(pc1[1])
+    # C# 里的 v3 重建: fj=atan2(z,x), d2=acos(y)  (用错分量会导致 ~37° 偏差)
+    fj = math.atan2(pc1[2], pc1[0])
+    d2 = math.acos(np.clip(pc1[1], -1.0, 1.0))
     v3 = np.array([math.sin(d2) * math.cos(fj),
                    math.cos(d2),
                    math.sin(d2) * math.sin(fj)])

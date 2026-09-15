@@ -1,33 +1,27 @@
-using MathNet.Numerics.LinearAlgebra;
-using MathNet.Numerics.LinearAlgebra.Double;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
-using Unity.VisualScripting;
 using UnityEngine;
 using Quaternion = UnityEngine.Quaternion;
 using Vector2 = UnityEngine.Vector2;
 using Vector3 = UnityEngine.Vector3;
 using Vector4 = UnityEngine.Vector4;
+using Complex = System.Numerics.Complex;
+using MathNet.Numerics.LinearAlgebra;
 public class sjy 
 {
     public List<Vector3> vector3s;
     public float d2;          // jh 计算出的半顶角
-    public float fj;                // 方位角（度）
-    public double[] r = new double[3]; // PCA 方差比
     public float rp;                // 母线长
     public Vector3 v3;              // 主轴方向
     public int a2;
     public float e3;// 点云总数（在 jh 
-    public UnityEngine.Vector3 vss;
+    public Vector3 vss;
     public List<Vector3> uvss;
     public Vector2[] uvs;
-    int gridH = 50;
-    private int gridPhi = 36;
-    private float sigma = 0.5f;    // 高斯涂抹带宽
-    private float[,] probabilityMap;
-    private float minU, maxU, minV, maxV;
+    public float theta2;
+    public float H;
+ 
     public float jh(int a1)
     {
         a2 = vector3s.Count;
@@ -43,55 +37,7 @@ public class sjy
         return d2;
 
     }
-    public void GaussianSplat(List<(Vector2 uv, float weight)> samples)
-    {
-        // 清空
-        for (int i = 0; i < gridH; i++)
-            for (int j = 0; j < gridPhi; j++)
-                probabilityMap[i, j] = 0f;
-
-        // 边界
-        float minU = float.MaxValue, maxU = float.MinValue;
-        float minV = float.MaxValue, maxV = float.MinValue;
-
-        foreach (var s in samples)
-        {
-            if (s.uv.x < minU) minU = s.uv.x;
-            if (s.uv.x > maxU) maxU = s.uv.x;
-            if (s.uv.y < minV) minV = s.uv.y;
-            if (s.uv.y > maxV) maxV = s.uv.y;
-        }
-        float pad = 3 * sigma;
-        minU -= pad; maxU += pad;
-        minV -= pad; maxV += pad;
-        this.minU = minU; this.maxU = maxU;
-        this.minV = minV; this.maxV = maxV;
-
-        float stepU = (maxU - minU) / (gridH - 1);
-        float stepV = (maxV - minV) / (gridPhi - 1);
-        float sigma2 = 2 * sigma * sigma;
-        float cutoff = 9 * sigma * sigma;
-
-        for (int i = 0; i < gridH; i++)
-        {
-            float u = minU + i * stepU;
-            for (int j = 0; j < gridPhi; j++)
-            {
-                float v = minV + j * stepV;
-                float sum = 0f;
-                foreach (var s in samples)
-                {
-                    float du = u - s.uv.x;
-                    float dv = v - s.uv.y;
-                    float dist2 = du * du + dv * dv;
-                    if (dist2 > cutoff) continue;
-                    sum += s.weight * Mathf.Exp(-dist2 / sigma2);
-                }
-                probabilityMap[i, j] = sum;
-            }
-        }
-
-    }
+  
 
     public void fjh(float d1)
 
@@ -114,34 +60,10 @@ public class sjy
         Complex complexDk = new Complex(dk, 0);
         Complex jk_complex = Complex.Sqrt(complexDk);
     }
-    public float pca()
-    {
-        int dim = 3;
-        var matrix = DenseMatrix.Create(vector3s.Count, dim, (i, j) =>
-        {
-            Vector3 p = vector3s[i];
-            if (j == 0) return p.x;
-            if (j == 1) return p.y;
-            return p.z;
-        });
-        var pca = new PCAScikitLearn();
-        pca.Fit(matrix, nComponents: 3);
-        r[0] = pca.ExplainedVarianceRatio[0];
-        r[1] = pca.ExplainedVarianceRatio[1];
-        r[2] = pca.ExplainedVarianceRatio[2];
-        Vector3 pc1 = new Vector3(
-    (float)pca.Components[0, 0],
-    (float)pca.Components[0, 1],
-    (float)pca.Components[0, 2]);
-        float absX = Mathf.Abs(pc1.x);
-        float absY = Mathf.Abs(pc1.y);
-        float absZ = Mathf.Abs(pc1.z);
-        float max = Mathf.Max(absX, absY, absZ);
-        float fj = Mathf.Atan2(pc1.y, pc1.x) * Mathf.Rad2Deg;
 
-        return fj;
-    }
-   
+
+
+    public Vector3[][] point1s;
     public Vector3[][] dn()
     {
         int jj = (int)(360 / d2);
@@ -166,31 +88,24 @@ public class sjy
             for (int i = 0; i < s.Count; i++)
             {
                 Vector3 v = new Vector3(
-                    (float)(vector3s[i2].x * s[i] * r[0]),
-                    (float)(vector3s[i2].y * s[i] * r[1]),
-                    (float)(vector3s[i2].z * s[i] * r[2])
+                    (float)(vector3s[i2].x * s[i]),
+                    (float)(vector3s[i2].y * s[i]),
+                    (float)(vector3s[i2].z * s[i])
                 );
                 vector3s1[i][i2] = v;
+              
             }
         }
+        this.point1s = vector3s1;
         return vector3s1;
     }
+    
     public Vector3[][] point2;
-    public Vector3[][] sx(Vector3[][] vector3s1)
+    public Vector3[][] sxxx()
     {
+        Vector3 v3 = nsjy.pca(vector3s);
         // 1. 计算主轴方向 v3
-        v3 = new Vector3(
-            Mathf.Sin(d2 * Mathf.Deg2Rad) * Mathf.Cos(fj * Mathf.Deg2Rad),
-            Mathf.Cos(d2 * Mathf.Deg2Rad),
-            Mathf.Sin(d2 * Mathf.Deg2Rad) * Mathf.Sin(fj * Mathf.Deg2Rad)
-        );
-        Debug.Log(v3.normalized);
-        if (uvss == null) uvss = new List<Vector3>();
-        if (!uvss.Contains(v3)) uvss.Add(v3);
-        e3 = (float)(Math.Cos(d2 * Mathf.Deg2Rad) * 2 / (1 + Math.Sin(d2 * Mathf.Deg2Rad)));
-
-
-
+        Vector3[][] vector3s1 = point1s;
         // 2. 生成所有扇区的方向向量 vcsArray
         Vector3 cs = Vector3.Cross(v3, Vector3.up).normalized;
         int jj = (int)(360 / d2);
@@ -260,19 +175,19 @@ public class sjy
         return vectors2;
     }
 
-    public float[] ComputeProbabilities(List<Vector3> points, float d2, Vector3 v31)
+    public float[] ComputeProbabilities(List<Vector3> points)
     {
         float d2Rad = d2 * Mathf.Deg2Rad;
         float h = rp * Mathf.Cos(d2Rad);
         float r = rp * Mathf.Sin(d2Rad);
         float a = (rp + r) * 0.5f;
-        Vector3 u1 = Vector3.Cross(v31, Vector3.up).normalized;
-        if (u1.sqrMagnitude < 1e-6f) u1 = Vector3.Cross(v31, Vector3.forward).normalized;
-        Vector3 center = h * v31;
+        Vector3 u1 = Vector3.Cross(v3, Vector3.up).normalized;
+        if (u1.sqrMagnitude < 1e-6f) u1 = Vector3.Cross(v3, Vector3.forward).normalized;
+        Vector3 center = h * v3;
         float c = h * e3;
 
-        Vector3 f1 = c * v31;
-        Vector3 f2 = -c * v31;
+        Vector3 f1 = c * v3;
+        Vector3 f2 = -c * v3;
         float[] fff = new float[points.Count];
         BatchProbability(points, f1, f2, a, fff);
         return fff;
@@ -294,16 +209,17 @@ public class sjy
     public Vector2[] MapDoubleConeToLeaf(List<Vector3> points)
     {
         // 新锥几何参数
-        Vector3[] v1;
+       
         float alpha = d2 * Mathf.Deg2Rad;
         float h = rp * Mathf.Cos(alpha);             // 原锥高
-        float R = rp * Mathf.Sin(alpha);
-        // 原底面半径
-        float H = Mathf.PI*R;
-        float theta = Mathf.Atan2(0.5f * h, H);// 新锥底面半径
+        float R = rp * Mathf.Sin(alpha);             // 原底面半径
+        float H = Mathf.PI * R;                      //高
+        float HR = 1f / 2f * h;                      //半径
+        float fzj = Mathf.Atan2(0.5f * h, H);
+        Vector3[] v1 = new Vector3[2];
+      
         var sols = ComplexAngleSolver.FindSolutions(alpha);
-        float theta2 = 0f;
-        //缩小a
+
         foreach (var z in sols)
         {
 
@@ -320,11 +236,12 @@ public class sjy
         }
         else
         {
-            v1 = th2(theta, H);
+            v1 = th2(fzj, H);
         }
 
-        Debug.Log((v1[0] - v1[1]).normalized);
-        uvs = new Vector2[points.Count];
+       
+        v3 = (v1[0] - v1[1]).normalized;//防止角度
+        uvs = new UnityEngine.Vector2[points.Count];
         uvss = new List<Vector3>();
         for (int i = 0; i < points.Count; i++)
         {
@@ -336,52 +253,95 @@ public class sjy
             }
             else
             {
-                v = th2(theta, points[i].y);
+                v = th2(fzj, points[i].y);
             }
-           
+
             float h1 = Vector3.Distance(v[0], v[1]);
             float y = h1 / h;
-
-            float Vc = (float)(y * y * y * 1 / 3 * Math.PI * H * 1 / 4 * h);
+            float Vc = (float)(y * y * y * (1f / 3f) * Math.PI * H * (1f / 4f) * h * h);
             Vector3 u2 = (v[0] - v[1]).normalized;
             Quaternion q = Quaternion.FromToRotation(v3, u2);
+            Vector3 v_ = new Vector3(points[i].x * y, points[i].y * y, points[i].z * y);
+            v_ = q * v_;
+            Debug.Log(points[i]);
+            Debug.Log(v_);
             Vector3 C = new Vector3(0, y * H, 0);
 
-
-
-            float c2 = (q * points[i]).magnitude;
-            float[] f = dd2(Vector3.zero, C, q * points[i]);
+            float c2 = points[i].magnitude * y;
+            float[] f = dd2(Vector3.zero, C, v_);
             float c3 = f[0];
-
-
-            float x = Mathf.Acos(1f / Mathf.Sqrt(c3 / c2));
-
-            float x2 = Mathf.Acos(1f / Mathf.Sqrt(c3 / h1));
-            float a12 = x * (Mathf.PI / 2f) * Mathf.Rad2Deg;
-            float b1 = x2 * (Mathf.PI / 2f) * Mathf.Rad2Deg;
-            float vabc = (float)(4 / 3 * Math.PI * f[1] * f[2] * 1 / 2 * h1);
-
-
-            Vector3 vector = new Vector3(f[1] * Mathf.Sin(a12) * Mathf.Cos(b1), f[2] * Mathf.Sin(a12) * Mathf.Cos(b1), 1 / 2 * h1 * Mathf.Cos(a12)).normalized;
-
-
-            Quaternion rot = Quaternion.FromToRotation(vector, q * points[i]);
-
-            float phi = Quaternion.Angle(rot, Quaternion.identity);
-
-
-            float opi = (float)Math.Pow(vabc / Vc, 2);
-
-            if (opi > 1000)
-            {
-                opi = y * 1000;
-            }
-            uvs[i] = new Vector2(opi * Mathf.Cos(phi), opi * Mathf.Sin(phi));
-            th4(uvs[i]);
+            float x = (c3 / c2);
+            float x2 = (c3 / h1);
+            float w1 = (float)Math.Sqrt(x * x - 1);
+            float w2 = (float)Math.Sqrt(x2 * x2 - 1);
+            double cAxis = Math.Abs(h1 * w2 - h1 * w1) / (2.0 * Math.PI);
+            float vabc = (float)(Math.PI * cAxis * cAxis * c3);
+            float opi = (float)Math.Pow(c2 / Math.Sqrt((h1 * 0.5f) * (h1 * 0.5f) + (y * H) * (y * H)), 2);
+            double phi = Math.PI * 2f * vabc / Vc;
+            uvs[i] = new Vector2((float)(opi * Math.Cos(phi)),
+            (float)(opi * Math.Sin(phi)));
         }
-      
         return uvs;
     }
+
+
+
+    public float[] dd2(Vector3 A, Vector3 B, Vector3 C)
+    {
+        // 1. 计算平面法向量
+        Vector3 n = Vector3.Cross(B - A, C - A);  // 以 A 为参考点更安
+        n.Normalize();
+        Vector3 e1 = (C - A).normalized;          // 以 AC 方向为 X 轴
+        Vector3 e2 = Vector3.Cross(n, e1).normalized;
+
+        // 2. 投影三个点到该平面（以 A 为原点）
+        Vector2 A2 = Vector2.zero;
+        Vector2 B2 = new Vector2(Vector3.Dot(B - A, e1), Vector3.Dot(B - A, e2));
+        Vector2 C2 = new Vector2(Vector3.Dot(C - A, e1), Vector3.Dot(C - A, e2));
+
+        // 3. 重心
+        Vector2 center = (A2 + B2 + C2) / 3f;
+
+        // 4. 协方差矩阵（使用投影后的二维坐标！）
+        float sxx = (A2.x - center.x) * (A2.x - center.x) +
+                    (B2.x - center.x) * (B2.x - center.x) +
+                    (C2.x - center.x) * (C2.x - center.x);
+        float syy = (A2.y - center.y) * (A2.y - center.y) +
+                    (B2.y - center.y) * (B2.y - center.y) +
+                    (C2.y - center.y) * (C2.y - center.y);
+        float sxy = (A2.x - center.x) * (A2.y - center.y) +
+                    (B2.x - center.x) * (B2.y - center.y) +
+                    (C2.x - center.x) * (C2.y - center.y);
+
+        // 5. 特征值
+        float trace = sxx + syy;
+        float det = sxx * syy - sxy * sxy;
+        float disc = Mathf.Sqrt(Mathf.Max(0, trace * trace - 4f * det));
+        float lambda1 = (trace + disc) * 0.5f;
+        float lambda2 = (trace - disc) * 0.5f;
+        // 6. 半轴（最大面积内切椭圆的半轴 = sqrt(λ/2)）
+        float a_ell = Mathf.Sqrt(Mathf.Max(0, lambda1 / 2f));
+        float b_ell = Mathf.Sqrt(Mathf.Max(0, lambda2 / 2f));
+        if (b_ell < 1e-6f) b_ell = a_ell * 0.1f;  // 防止退化导致除零
+                                                  // 7. 周长（拉马努金近似）
+        float C_ell = Mathf.PI * (3f * (a_ell + b_ell) -
+                      Mathf.Sqrt((3f * a_ell + b_ell) * (a_ell + 3f * b_ell)));
+        // 8. 绕长轴旋转的椭球体积
+        return new float[] { C_ell, a_ell, b_ell, center.x, center.y };
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
     public Vector3 th4(Vector2 uvs)
     {
         float Rs = Mathf.Sqrt(uvs.x * uvs.x + uvs.y * uvs.y);
@@ -451,60 +411,7 @@ public class sjy
         );
         return new Vector3[] { c1, c2 };
     }
-    public float[] dd2(Vector3 A, Vector3 B, Vector3 C)
-    {
-        // 1. 计算平面法向量
-        Vector3 n = Vector3.Cross(B - A, C - A);  // 以 A 为参考点更安全
-
-
-
-
-        n.Normalize();
-        Vector3 e1 = (C - A).normalized;          // 以 AC 方向为 X 轴
-        Vector3 e2 = Vector3.Cross(n, e1).normalized;
-
-        // 2. 投影三个点到该平面（以 A 为原点）
-        Vector2 A2 = Vector2.zero;
-        Vector2 B2 = new Vector2(Vector3.Dot(B - A, e1), Vector3.Dot(B - A, e2));
-        Vector2 C2 = new Vector2(Vector3.Dot(C - A, e1), Vector3.Dot(C - A, e2));
-
-        // 3. 重心
-        Vector2 center = (A2 + B2 + C2) / 3f;
-
-        // 4. 协方差矩阵（使用投影后的二维坐标！）
-        float sxx = (A2.x - center.x) * (A2.x - center.x) +
-                    (B2.x - center.x) * (B2.x - center.x) +
-                    (C2.x - center.x) * (C2.x - center.x);
-        float syy = (A2.y - center.y) * (A2.y - center.y) +
-                    (B2.y - center.y) * (B2.y - center.y) +
-                    (C2.y - center.y) * (C2.y - center.y);
-        float sxy = (A2.x - center.x) * (A2.y - center.y) +
-                    (B2.x - center.x) * (B2.y - center.y) +
-                    (C2.x - center.x) * (C2.y - center.y);
-
-        // 5. 特征值
-        float trace = sxx + syy;
-        float det = sxx * syy - sxy * sxy;
-        float disc = Mathf.Sqrt(Mathf.Max(0, trace * trace - 4f * det));
-        float lambda1 = (trace + disc) * 0.5f;
-        float lambda2 = (trace - disc) * 0.5f;
-
-        // 6. 半轴（最大面积内切椭圆的半轴 = sqrt(λ/2)）
-        float a_ell = Mathf.Sqrt(Mathf.Max(0, lambda1 / 2f));
-        float b_ell = Mathf.Sqrt(Mathf.Max(0, lambda2 / 2f));
-        if (b_ell < 1e-6f) b_ell = a_ell * 0.1f;  // 防止退化导致除零
-
-        // 7. 周长（拉马努金近似）
-        float C_ell = Mathf.PI * (3f * (a_ell + b_ell) -
-                      Mathf.Sqrt((3f * a_ell + b_ell) * (a_ell + 3f * b_ell)));
-
-
-        // 8. 绕长轴旋转的椭球体积
-
-
-
-        return new float[] { C_ell, a_ell, b_ell };
-    }
+   
     public static (float A, Vector3 Bvec) FitDispersion(
      Dictionary<Vector3, float[]> Q,
      float[] freqBins)
@@ -635,7 +542,7 @@ public class sjy
 
             }
 
-            float[] fff = ComputeProbabilities(y, d2, v3);
+            float[] fff = ComputeProbabilities(y);
             if (!q.ContainsKey(uvss[i]))
             {
                 q.Add(uvss[i], fff);
@@ -656,6 +563,7 @@ public class sjy
     public List<Vector3> points1;
     public List<Vector3> points2;
     public Quaternion R_total;
+    public float[] r;
     public void Vss1(Vector3 v, out Vector3 V, out Vector3 V_A, out Vector3 V_D,
                  out Vector3 V_q1, out Vector3 V_q2)
     {
@@ -915,7 +823,101 @@ public class sjy
         return sum;
     }
     public int com;
+    // 诊断输出 (供外部读取)
+    public Complex lastTau, lastJ, lastRatio;
+    // ==================================================================
+    //  rbf  —— 已替换 RBF 的主链
+    //
+    //  旧链 (保留为下方的 rbf_RBF 以便对照):
+    //      Vss1(points1,points2) -> ComputeAllFeatures -> V2 (只有 100 点)
+    //      -> MapUVToS3(uvs,V2) -> X       (V2 的逐点信息被压成 theta2 / meanR 两个全局标量)
+    //      -> SphericalRBF(X, probs) -> w_pred -> 两层 NumericalGradient -> H
+    //      -> stiffnessProj = 0.5*H*z      (名字叫刚度, 里面没有刚度)
+    //
+    //  新链:
+    //      (u,v) -> 双锥两叶 A,B -> J = B - A
+    //          d = ||J||,  g = ||[dJ/du, dJ/dv]||_F
+    //          I = d/g,    V = I^4 * Phi(g)       闭式 (Phi 是 4 维球冠体积比)
+    //      -> H = LensVolumeSimple.LocalQuadHessian(uvs, probs, 12)    叶面局部二次拟合
+    //      -> stiffnessProj = Vn ⊙ 0.5*H*z     透镜体积作刚度系数
+    //      不再需要: Vss1 抛物线 / MapUVToS3 / S^3 / SphericalRBF / 不完全 Beta
+    // ==================================================================
     public void rbf(List<Vector3> points1, List<Vector3> points2, float[] vt)
+    {
+        // ---------- 1) 逐点透镜场:  (u,v) -> d,g -> I,V ----------
+        var L = LensVolumeSimple.ComputeLeafLens(uvs, rp, d2, v3, 16);
+        float[] Vn = LensVolumeSimple.LogNormalize(L.V);
+
+        float gmin = float.MaxValue, gmax = float.MinValue, xmin = 1f, xmax = 0f, vnSum = 0f;
+        for (int i = 0; i < L.Count; i++)
+        {
+            if (L.g[i] < gmin) gmin = L.g[i];
+            if (L.g[i] > gmax) gmax = L.g[i];
+            float xx = 1f - 0.25f * L.g[i] * L.g[i];
+            if (xx < xmin) xmin = xx;
+            if (xx > xmax) xmax = xx;
+            vnSum += Vn[i];
+        }
+        Debug.Log($"[rbf] 透镜场 g in [{gmin:F4},{gmax:F4}]  x=1-g^2/4 in [{xmin:F4},{xmax:F4}]" +
+                  $"  Vn 均值 {(L.Count > 0 ? vnSum / L.Count : 0f):F4}");
+
+        // ---------- 2) uvss 仍按原样填 (外势项与取向项要用) ----------
+        float maxI = 0f;
+        for (int i = 0; i < L.Count; i++) if (L.I[i] > maxI) maxI = L.I[i];
+        if (maxI <= 0f) maxI = 1f;
+        for (int i = 0; i < L.Count; i++) th4(new Vector2(L.I[i] / maxI, Vn[i]));
+
+        // ---------- 3) 概率场 Hessian: 叶面局部二次拟合, 不再走 RBF ----------
+        float[] w_prob = AverageProbabilitySequence(q);
+        var H = LensVolumeSimple.LocalQuadHessian(uvs, w_prob, 12);
+        int hBad = 0;
+        for (int i = 0; i < H.H_uu.Length; i++)
+            if (float.IsNaN(H.H_uu[i]) || float.IsNaN(H.H_uv[i]) || float.IsNaN(H.H_vv[i])) hBad++;
+        Debug.Log($"[rbf] LocalQuadHessian 非有限 {hBad}/{uvs.Length}");
+
+        // ---------- 4) 三个势 ----------
+        float[] externalPotential = new float[uvs.Length];
+        for (int i = 0; i < uvs.Length; i++)
+            externalPotential[i] = Vector3.Dot(uvss[i], vss);
+
+        Complex[] gradStandard = NumericalGradient(uvs, externalPotential, 12);
+        Complex[] AB_vals = new Complex[uvs.Length];
+        for (int i = 0; i < uvs.Length; i++)
+            AB_vals[i] = 0.5f * new Complex((float)gradStandard[i].Real,
+                                           -(float)gradStandard[i].Imaginary);
+
+        // 刚度 × 曲率: 透镜体积乘在 Hessian 投影上
+        // 注意: v2sjy.cs 用的是 System.Numerics.Complex, 这里逐点转过来
+        System.Numerics.Complex[] stiffSys = LensVolumeSimple.StiffnessProjectionFromH(uvs, H, Vn);
+        Complex[] stiffnessProj = new Complex[uvs.Length];
+        for (int i = 0; i < uvs.Length; i++)
+            stiffnessProj[i] = new Complex(stiffSys[i].Real, stiffSys[i].Imaginary);
+
+        xl4(point2[0]);
+        float[] avg = new float[uvs.Length];
+        for (int k = 0; k < uvs.Length; k++)
+        {
+            float sum = 0f;
+            int count1 = 0;
+            foreach (var dir in uvss)
+            {
+                if (p.ContainsKey(dir))
+                {
+                    sum += Quaternion.Angle(p[dir][k], R_total);
+                    count1++;
+                }
+            }
+            avg[k] = sum / Mathf.Max(count1, 1);
+        }
+        Complex[] gradSt = NumericalGradient(uvs, avg, 12);
+        Complex[] quatGrad = new Complex[uvs.Length];
+        for (int i = 0; i < uvs.Length; i++)
+            quatGrad[i] = 0.5f * new Complex((float)gradSt[i].Real, -(float)gradSt[i].Imaginary);
+
+        BuildABCD(stiffnessProj, AB_vals, quatGrad);
+    }
+
+    public void rbf_RBF(List<Vector3> points1, List<Vector3> points2, float[] vt)
     {
         LocalLensVolumeExtractor.ComputeAllFeatures(points1, points2,
        out float[] I_arr, out float[] V_arr);
@@ -952,9 +954,9 @@ public class sjy
         Vector4 testPoint = new Vector4(0.5f, 0.3f, 0.7f, 0.4f);
         testPoint.Normalize();
         double predictedValue = rbfModel.Predict(testPoint);
-        
+
         double pred0 = rbfModel.Predict(x[0]);
-      
+
         double[] rbfWeights = rbfModel.GetWeights();
         float[] externalPotential = new float[uvs.Length];
         for (int i = 0; i < uvs.Length; i++)
@@ -1042,6 +1044,15 @@ public class sjy
             quatGrad[i] = 0.5f * new Complex(dw_du, -dw_dv);
 
         }
+        BuildABCD(stiffnessProj, AB_vals, quatGrad);
+    }
+
+    // ==================================================================
+    //  三个势 -> totalGrad -> FitPolynomial -> ABCD -> tau -> j
+    //  (原 rbf 尾部原样保留, 供新旧两条路共用)
+    // ==================================================================
+    private void BuildABCD(Complex[] stiffnessProj, Complex[] AB_vals, Complex[] quatGrad)
+    {
         Complex replacement = InverseTh4(v3, d2);
 
         com = 70;
@@ -1087,31 +1098,211 @@ public class sjy
             }
             if (replaced) uvReplacedCount++;
         }
+        Complex[] f_num = new Complex[f.Length];
+        Complex[] grad_num = new Complex[totalGrad.Length];
+        for (int i = 0; i < f.Length; i++)
+            f_num[i] = new Complex(f[i].Real, f[i].Imaginary);
 
-       
+        for (int i = 0; i < totalGrad.Length; i++)
+            grad_num[i] = new Complex(totalGrad[i].Real, totalGrad[i].Imaginary);
         // 拟合 ABCD
-        var (A, B, C, D) = FitPolynomial(f, totalGrad);
-        Debug.Log((A, B, C, D));
-        Complex delta = Discriminant(A, B, C, D);
-        Complex[,] omega = ComputeOmega(A, B, C, D);
-        double[,] lattice = BuildLatticeFromOmega(omega);
-        List<(Complex x, Complex y)> yzqxs = yzqx(f);
-        int count = yzqxs.Count;
-        double[,] reducedPoints = new double[count, 4];
-        for (int i = 0; i < count; i++)
-        {
-            var (z1, z2) = yzqxs[i];
-            double[] vec = new double[] { z1.Real, z1.Imaginary, z2.Real, z2.Imaginary };
-            double[] reduced = ReduceToFundamentalDomain(vec, lattice);
-            for (int j = 0; j < 4; j++) reducedPoints[i, j] = reduced[j];
-        }
+        var (A1, B1, C1, D1) = FitPolynomial(f_num, grad_num);
+        Complex A= new Complex(A1.Real, A1.Imaginary);
+        Complex B = new Complex(B1.Real, B1.Imaginary);
+        Complex C = new Complex(C1.Real, C1.Imaginary);
+        Complex D = new Complex(D1.Real, D1.Imaginary);
+        Complex disc = B * B - 4.0 * A * C;
+        Complex sqrtDisc = Complex.Sqrt(disc);
+        Complex ratio = (B + sqrtDisc) / (B - sqrtDisc);
 
-       
-        
+
+        if (ratio.Magnitude > 1)
+            ratio = Complex.One / ratio;
+
+
+        Complex tau = Complex.Log(ratio) / (2 * Math.PI * Complex.ImaginaryOne);   // tau = log(ratio)/(2*pi*i)
+        Complex jk = JInvariant(tau);
+        lastTau = tau; lastJ = jk; lastRatio = ratio;
+        Debug.Log(jk);
+        double discRatio = disc.Magnitude / Math.Max((B * B).Magnitude, 1e-30);
+        Debug.Log($"|disc|/|B²| = {discRatio:E4}");
+        var replaced1 = new List<double>();
+        for (int i = 0; i < uvs.Length; i++)
+            if (new Complex(uvs[i].x, uvs[i].y).Magnitude > com)
+                replaced1.Add(Math.Atan2(uvs[i].y, uvs[i].x));
+
+        double R = Math.Sqrt(
+            Math.Pow(replaced1.Average(a => Math.Cos(a)), 2) +
+            Math.Pow(replaced1.Average(a => Math.Sin(a)), 2));
+        Debug.Log($"被过滤点的角度集中度 R = {R:F4}");
+        // f 的模长直方图
+        var fMag = f.Select(z => z.Magnitude).ToArray();
+        Debug.Log($"f: mean={fMag.Average():F2}, median={fMag.OrderBy(x => x).ElementAt(fMag.Length / 2):F2}, max={fMag.Max():F2}");
+
+        // f 的相位集中度
+        var fPhase = f.Select(z => z.Phase).ToArray();
+        double Rf = Math.Sqrt(
+            Math.Pow(fPhase.Average(a => Math.Cos(a)), 2) +
+            Math.Pow(fPhase.Average(a => Math.Sin(a)), 2));
+        Debug.Log($"f 相位集中度 R = {Rf:F4}");
+
+
+
+
 
 
     }
+    public static Complex JInvariant(Complex tau)
+    {
+        Complex q = Complex.Exp(2*Math.PI * Complex.ImaginaryOne * tau);   // q = exp(2*pi*i*tau) = ratio
+        // j = (θ₂⁸ + θ₃⁸ + θ₄⁸)³ / (θ₂θ₃θ₄)⁸
+        // 简化：用 q-级数
+        Complex j = Complex.One / q + 744 + 196884 * q
+                  + 21493760 * q * q + 864299970 * Complex.Pow(q, 3);
+        return j;
+    }
 
+    public static class TwistMap
+    {
+        /// <summary>
+        /// 从 ABCD 提取复数 α。
+        /// </summary>
+        /// 
+
+
+        public static Complex AlphaFromABCD(Complex A, Complex B,
+                                             Complex C, Complex D)
+        {
+            Complex disc = B * B - 4.0 * A * C;
+            Complex sqrtDisc = Complex.Sqrt(disc);
+            Complex ratio = (B + sqrtDisc) / (B - sqrtDisc);
+            Complex tau = Complex.Log(ratio) / (2.0 * Math.PI * Complex.ImaginaryOne);   // tau = log(ratio)/(2*pi*i)
+
+            // 约化到基本域
+            tau = ReduceToFundamentalDomain(tau);
+
+            // m = λ(τ) = (θ₂/θ₃)^4
+            Complex m = MFromTau(tau);
+
+            // α = 1/√m
+            return 1.0 / Complex.Sqrt(m);
+        }
+
+        /// <summary>
+        /// 对单个点施加扭曲 w = z^α（主分支）。
+        /// </summary>
+        public static Complex Twist(Complex z, Complex alpha)
+        {
+            if (z == Complex.Zero) return Complex.Zero;
+            return Complex.Exp(alpha * Complex.Log(z));
+        }
+
+        /// <summary>
+        /// 批量变换整个点集。
+        /// </summary>
+        public static Complex[] TransformAll(Complex[] z, Complex alpha)
+        {
+            Complex[] w = new Complex[z.Length];
+            for (int i = 0; i < z.Length; i++)
+                w[i] = Twist(z[i], alpha);
+            return w;
+        }
+
+        /// <summary>
+        /// 追踪一个点绕原点的"螺旋"——显示非叶状结构。
+        /// 返回 (相位圈数, 幅度比)。
+        /// </summary>
+        public static (double phaseTurns, double ampRatio) TraceSpiral(
+            Complex z, Complex alpha, int steps = 720)
+        {
+            Complex w0 = Twist(z, alpha);
+            double totalPhase = 0;
+            Complex prevW = w0;
+
+            for (int k = 1; k <= steps; k++)
+            {
+                double t = 2 * Math.PI * k / steps;
+                Complex curZ = z * Complex.FromPolarCoordinates(1, t);
+                Complex curW = Twist(curZ, alpha);
+
+                totalPhase += (curW / prevW).Phase;
+                prevW = curW;
+            }
+
+            double ampRatio = prevW.Magnitude / w0.Magnitude;
+            return (totalPhase / (2 * Math.PI), ampRatio);
+        }
+
+        private static Complex ReduceToFundamentalDomain(Complex tau)
+        {
+            while (true)
+            {
+                if (tau.Imaginary < 0) tau = -Complex.One / tau;
+                if (tau.Magnitude < 1) { tau = -Complex.One / tau; continue; }
+                if (tau.Real > 0.5) tau -= Complex.One;
+                else if (tau.Real < -0.5) tau += Complex.One;
+                else break;
+            }
+            return tau;
+        }
+
+        private static Complex MFromTau(Complex tau)
+        {
+            Complex q = Complex.Exp(Complex.ImaginaryOne * Math.PI * tau);   // theta 的 q = exp(i*pi*tau)
+            Complex t2 = Theta2(q);
+            Complex t3 = Theta3(q);
+            return Complex.Pow(t2 / t3, 4);
+        }
+
+        private static Complex Theta2(Complex q)
+        {
+            Complex sum = Complex.Zero;
+            for (int n = 0; n < 60; n++)
+                sum += Complex.Pow(q, n * (n + 1));
+            return 2 * Complex.Pow(q, 0.25) * sum;
+        }
+
+        private static Complex Theta3(Complex q)
+        {
+            Complex sum = Complex.One;
+            for (int n = 1; n < 60; n++)
+                sum += 2 * Complex.Pow(q, n * n);
+            return sum;
+        }
+    }
+    public static Complex Theta2(Complex q)
+    {
+        Complex sum = Complex.Zero;
+        for (int n = 0; n < 60; n++)
+            sum += Complex.Pow(q, n * (n + 1));
+        return 2 * Complex.Pow(q, 0.25) * sum;
+    }
+
+    public static Complex Theta3(Complex q)
+    {
+        Complex sum = Complex.One;
+        for (int n = 1; n < 60; n++)
+            sum += 2 * Complex.Pow(q, n * n);
+        return sum;
+    }
+
+    // 从 τ 反解模数平方 m = k²
+    public static Complex MFromTau(Complex tau)
+    {
+        Complex q = Complex.Exp(Complex.ImaginaryOne * Math.PI * tau);   // theta 的 q = exp(i*pi*tau)
+        Complex t2 = Theta2(q);
+        Complex t3 = Theta3(q);
+        return Complex.Pow(t2 / t3, 4);
+    }
+
+    // 从 τ 得 α = 1/k
+    public static double AlphaFromTau(Complex tau)
+    {
+        if (tau.Imaginary < 0) tau = -Complex.One / tau;
+        Complex m = MFromTau(tau);
+        Complex k = Complex.Sqrt(m);
+        return (1.0 / k).Real;
+    }
     public static Complex[,] ComputeOmega(Complex A, Complex B, Complex C, Complex D)
 {
     // 计算判别式
@@ -1121,7 +1312,7 @@ public class sjy
     // 计算模参数 τ
     Complex sqrtDisc = Complex.Sqrt(disc);
     Complex ratio = (B + sqrtDisc) / (B - sqrtDisc);
-    Complex tau = Complex.Log(ratio) / (2.0 * Math.PI * Complex.ImaginaryOne);
+    Complex tau = Complex.Log(ratio) / (2.0 * Math.PI * Complex.ImaginaryOne);   // tau = log(ratio)/(2*pi*i)
 
     // 构造 Ω = [[tau, i], [i, tau]]（可自由选择形式，这里取对称形式）
     Complex[,] omega = new Complex[2, 2];
@@ -1163,27 +1354,36 @@ public List<(Complex x, Complex y)> yzqx(Complex[] f)
     }
     public static double[] ReduceToFundamentalDomain(double[] vector, double[,] lattice)
     {
-        // 将 lattice 转为 MathNet 矩阵
-        var mat = Matrix<double>.Build.DenseOfArray(lattice);
-        var vec = MathNet.Numerics.LinearAlgebra.Vector<double>.Build.Dense(vector);
+        int rows = lattice.GetLength(0);
+        int cols = lattice.GetLength(1);
+        int n = vector.Length;     // vector 是 double[], 用 Length
 
-        // 求逆矩阵（要求矩阵满秩）
-        var inv = mat.Inverse();
+        // 1. 手动构造矩阵（避免 Matrix.Create 弃用）
+        var mat = Matrix<double>.Build.Dense(rows, cols);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                mat[i, j] = lattice[i, j];
 
-        // 计算基坐标 t = inv * vec
-        var t = inv * vec;
+        // 2. 手动构造向量
+        var vec = Vector<double>.Build.Dense(n);
+        for (int i = 0; i < n; i++)
+            vec[i] = vector[i];
 
-        // 取每个分量的小数部分，确保在 [0,1)
-        for (int i = 0; i < t.Count; i++)
+        // 3. 直接求解 mat * t = vec，比求逆再乘更稳
+        var t = mat.Solve(vec);
+
+        // 4. 取小数部分，归约到 [0, 1)
+        double[] result = new double[n];
+        for (int i = 0; i < n; i++)
         {
-            t[i] = t[i] - Math.Floor(t[i]);
-            // 处理浮点误差
-            if (t[i] >= 1.0) t[i] = 0.0;
-            if (t[i] < 0.0) t[i] += 1.0;
+            double x = t[i];
+            x = x - Math.Floor(x);
+            if (x >= 1.0) x = 0.0;
+            if (x < 0.0) x += 1.0;
+            result[i] = x;
         }
 
-        // 返回基坐标（可直接用于均匀性检验）
-        return t.ToArray();
+        return result;
     }
     public static double[,] BuildLatticeFromOmega(Complex[,] omega)
     {
@@ -1204,15 +1404,18 @@ public List<(Complex x, Complex y)> yzqx(Complex[] f)
 
         return lattice;
     }
-    
-    private static (Complex A, Complex B, Complex C, Complex D) FitPolynomial(Complex[] f, Complex[] F)
+
+    public static (Complex A, Complex B, Complex C, Complex D)
+     FitPolynomial(Complex[] f, Complex[] F)
     {
         int N = f.Length;
+
+        // 1. 构造矩阵和向量
         var Xmat = Matrix<Complex>.Build.Dense(N, 4);
-        var Yvec = MathNet.Numerics.LinearAlgebra.Vector<Complex>.Build.Dense(N);
+        var Yvec = Vector<Complex>.Build.Dense(N);
+
         for (int i = 0; i < N; i++)
         {
-           
             Complex zBar = Complex.Conjugate(f[i]);
             Xmat[i, 0] = f[i];
             Xmat[i, 1] = zBar;
@@ -1220,9 +1423,13 @@ public List<(Complex x, Complex y)> yzqx(Complex[] f)
             Xmat[i, 3] = zBar * zBar;
             Yvec[i] = F[i];
         }
-        // 使用 SVD 分解，对病态矩阵更稳定
+
+        // 2. SVD 分解
         var svd = Xmat.Svd();
+
+        // 3. 用 SVD 求最小二乘解 beta = X⁺ · Y
         var beta = svd.Solve(Yvec);
+
         return (beta[0], beta[1], beta[2], beta[3]);
     }
 
@@ -1264,7 +1471,7 @@ public List<(Complex x, Complex y)> yzqx(Complex[] f)
 
         for (int i = 0; i < N; i++)
         {
-            // 计算距离并排序
+            // 1. 计算距离并排序
             var dists = new (int index, float dist)[N];
             for (int j = 0; j < N; j++)
             {
@@ -1272,16 +1479,19 @@ public List<(Complex x, Complex y)> yzqx(Complex[] f)
                 float dy = uv[j].y - uv[i].y;
                 dists[j] = (j, Mathf.Sqrt(dx * dx + dy * dy));
             }
-            var neighbors = dists.OrderBy(d => d.dist)
-                                 .Where(d => d.dist > 1e-8)   // 过滤重复点
-                                 .Take(Math.Min(K, N))
-                                 .ToArray();
+
+            var neighbors = dists
+                .OrderBy(d => d.dist)
+                .Where(d => d.dist > 1e-8)
+                .Take(Math.Min(K, N))
+                .ToArray();
 
             int M = neighbors.Length;
             if (M < 3) { grad[i] = Complex.Zero; continue; }
 
+            // 2. 构造矩阵 A 和向量 b
             var A = Matrix<double>.Build.Dense(M, 3);
-            var b = MathNet.Numerics.LinearAlgebra.Vector<double>.Build.Dense(M);
+            var b = Vector<double>.Build.Dense(M);
             for (int k = 0; k < M; k++)
             {
                 int idx = neighbors[k].index;
@@ -1291,11 +1501,44 @@ public List<(Complex x, Complex y)> yzqx(Complex[] f)
                 b[k] = values[idx];
             }
 
-            // 使用 SVD 求解，增强数值稳定性
+            // 3. 用 SVD 求解最小二乘
             var svd = A.Svd();
-            var sol = svd.Solve(b);
-            grad[i] = new Complex(sol[0], sol[1]);
+
+            // 4. 手动用 SVD 求解 beta = V · S⁺ · U^T · b
+            var U = svd.U;    // M × M
+            var S = svd.S;          // min(M, 3) 个奇异值
+            var V = svd.VT;    // 3 × 3
+
+            int m = A.RowCount;    // = M
+            int n = A.ColumnCount; // = 3
+            int kk = S.Count;      // MathNet 的 Vector<T> 用 Count
+
+            // UTy = U^T · b
+            var UTy = Vector<double>.Build.Dense(kk);
+            for (int r = 0; r < kk; r++)
+            {
+                double sum = 0;
+                for (int c = 0; c < m; c++)
+                    sum += U[c, r] * b[c];
+                UTy[r] = sum;
+            }
+
+            // beta = V · S⁺ · UTy
+            var beta = Vector<double>.Build.Dense(n);
+            for (int r = 0; r < n; r++)
+            {
+                double sum = 0;
+                for (int c = 0; c < kk; c++)
+                {
+                    double sInv = (S[c] > 1e-12) ? 1.0 / S[c] : 0.0;
+                    sum += V[c, r] * (sInv * UTy[c]);   // V = svd.VT, 所以 V_orig[r,c] = VT[c,r]
+                }
+                beta[r] = sum;
+            }
+
+            grad[i] = new Complex(beta[0], beta[1]);
         }
+
         return grad;
     }
     public static (float[] theta1, float theta2, float[] theta3) ExtractAngles(Vector2[] uv, Vector2[] V2)

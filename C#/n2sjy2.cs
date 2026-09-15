@@ -1,14 +1,12 @@
-using MathNet.Numerics.LinearAlgebra;
-using MathNet.Numerics.LinearAlgebra.Double;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using System.Security.Cryptography;
 using UnityEngine;
-using static alglib;
 using Quaternion = UnityEngine.Quaternion;
 using Vector3 = UnityEngine.Vector3;
+using Complex = System.Numerics.Complex;
+using MathNet.Numerics.LinearAlgebra;
 
 public class n2sjy2 : MonoBehaviour
 {
@@ -25,20 +23,30 @@ public class n2sjy2 : MonoBehaviour
     public float angleDegnew;
     private void Start()
     {
+       
         var (t1, t2) = ComputeTaus(2,Math.Sqrt(2));
-        for (int trial = 0; trial < 1; trial++)
+        if (true)
         {
-            // 1. 生成随机点集（单位球体内）
-
-            for (int i = 0; i < 200; i++)
-            {
-                Vector3 p = UnityEngine.Random.insideUnitSphere;
-                points.Add(p);
-            }
-
+            VectorList vectorList = JsonVectorParser.jsonpy("points");
+            points = vectorList.Vector3List;
         }
-        rp = ComputeRp(points);
+        else
+        {
+            for (int trial = 0; trial < 1; trial++)
+            {
+                // 1. 生成随机点集（单位球体内）
+
+                for (int i = 0; i < 200; i++)
+                {
+                    Vector3 p = UnityEngine.Random.insideUnitSphere;
+                    points.Add(p);
+                }
+                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                JsonVectorParser.SavePoints(points, timestamp);
+            }
+        }
         float d2 = Mathf.Asin(Mathf.Cos(30 * Mathf.Deg2Rad) / Mathf.PI);
+        rp = ComputeRp(points);
        
         a = rp * (1 + Mathf.Sin(d2));
         float e3 = (float)(Math.Cos(d2) * 2 / (1 + Math.Sin(d2)));
@@ -47,9 +55,15 @@ public class n2sjy2 : MonoBehaviour
         float c = h * e3;
         List<(Complex x, Complex y)> yzqx1 = yzqx(points, out r45, out r30, out r74, rp);
         Complex t_ = new Complex(0, 1);
-        Vector3 v = pca(points).normalized;
+        Vector3 v = nsjy.pca(points).normalized;
         float[][] probs12 = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
         var (F1, F2) = ExtractFoci(points, probs12[1], probs12[3][1], probs12[2], probs12[3][2]);
+
+
+
+
+
+
         var (f1, f2) = FitFociByProbability(points, probs12[0], F1, F2, a);
         Vector3 v2 = (f1 - f2).normalized;
         Vector3 f1f = f1;
@@ -64,59 +78,161 @@ public class n2sjy2 : MonoBehaviour
     
         float[] s4 = BatchProbability(v4*c,v4*-c, points, a); // f012
 
-
+       
         int a22 = 1;
-        if(a22 == 1)
+        Debug.Log(v);
+        //var (t1_new_, t2_new_, F1_new_, F2_new_) = RefineModuliByAxis(points, t1, t2, v, 50,0.5f,0.001f,1f,2f);//直接收敛失败后进行摆动收敛
+       // var (t1_new_1, t2_new_1, F1_new_1, F2_new_1) = RefineModuliByAxis(points, t_, t_, v, 50, 0.5f, 0.001f, 1f, 2f);
+
+        t1 = t_;
+        t2 = t_;
+        //Vector3 u = Vector3.Cross((F1_new_1 - F2_new_1).normalized, (F01-F02).normalized);
+        // (u.magnitude < 1e-6f)
+       //     u = Vector3.Cross((F01 - F02).normalized, Vector3.right);
+        //u.Normalize();
+       // Vector3 w = Vector3.Cross((F01 - F02).normalized, u).normalized;
+        //float goldenAngle = 137.507764f;
+        //float phi0 = Mathf.Atan2(Vector3.Dot((F1_new_1 - F2_new_1).normalized, w), Vector3.Dot((F1_new_1 - F2_new_1).normalized, u));
+
+        if (false)
         {
             for (int i = 0; i < 100; i++)
+            { 
+                float t = (i + 1) / (float)80; // 0~1
+               // float theta = Mathf.Lerp(phi0, 80, t) * Mathf.Deg2Rad;
+              //  float phi = phi0 + i * goldenAngle * Mathf.Deg2Rad;
+
+               // Vector3 d = Mathf.Cos(theta) * (F01 - F02).normalized+ Mathf.Sin(theta) * (Mathf.Cos(phi) * u + Mathf.Sin(phi) * w);
+
+              //  float angle = Vector3.Angle(d, v);
+
+               // Debug.Log((angle));
+
+            }
+        }
+
+        if (a22 == 1)
+        {
+            for (int i = 0; i < 0; i++)
             {
 
                 float[][] probnew = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
-                angleDegnew = Vector3.Angle((f01 -f02),(f1 -f2));
-                var (t1_new, t2_new, F1_new, F2_new) = RefineModuliByAxis(points, t_, t_, (f1 - f2).normalized, 50);//即使是单个震荡也会接近，只是nm有问题
+                angleDegnew = Vector3.Angle((f1 - f2), (f01 - f02));
+               
+                float anglenew = Vector3.Angle((f1 - f2), (v));
+                Debug.Log((angleDegnew,anglenew));
+                Vector3 d = (f1 - f2).normalized;
+                Vector3 r = (f01 - f02).normalized;
+                Vector3 axi = d;
+                if (false )   // 活性不足时扰动
+                {
+                    // 构造与 r 成 60° 的方向: 绕 r 随机方位
+                    Vector3 n = Vector3.Cross(d, r).normalized;
+                    //if (n.magnitude < 1e-4f) n = Vector3.Cross(d, Vector3.up).normalized;
+                    Quaternion rotationnew  = Quaternion.AngleAxis( 60,n );
+                    axi = (rotationnew * d).normalized;
+
+
+                    
+
+
+
+                    // 1) 转到 60° 锥面 (同平面)
+                    // Vector3 q = Vector3.Cross(r, n).normalized;  // ⟂r 分量方向
+                    // float cosT = 0.5f;  // cos60°
+                    //float sinT = 0.866f;
+                    // d 的垂直分量方向
+                    // Vector3 dPerp = (d - Vector3.Dot(d, r) * r).normalized;
+                    //Vector3 onCone = cosT * r + sinT * dPerp;    // 60°锥面上最近点
+                    // 2) 绕 r 随机方位旋转 (探索)
+                    //float az = Random.Range(0f, 360f);
+                    //axi = Quaternion.AngleAxis(az, r) * onCone;
+                    //axi = axi.normalized;
+                    float angle = Vector3.Angle((axi),(v));
+                    angleDegnew = angle;
+                    Debug.Log(angle);
+                 
+
+                }
+
+                var (t1_new, t2_new, F1_new, F2_new) = RefineModuliByAxis(points, t_, t_, axi, 50);//即使是单个震荡也会接近，只是nm有问题
                 float[][] prob_new = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1_new, t2_new, a);
+
                 var (f_1new, f_2new) = FitFociByProbability(points, prob_new[0], F1_new, F2_new, a);
                 Vector3 v6 = (f_1new - f_2new).normalized;
                 float[] s6 = BatchProbability(v6 * c, v6 * -c, points, a);
                 float angleDeg5 = Vector3.Angle((v6), (v2));
                 float angleDeg6 = Vector3.Angle((v6), (v4));
                 float angleDeg9 = Vector3.Angle((v6), v);
-                
-                Debug.Log((angleDeg9,angleDegnew,angleDegodr));
+             
+                Debug.Log((angleDeg9,angleDeg5,angleDegnew,angleDegodr));
                
 
-                //if (Math.Abs(angleDegodr - angleDegnew) > 9 && angleDeg9 <1) { break; }
-                Vector3 axis = Vector3.Cross(v6, v2).normalized; // 旋转轴
-                Vector3 axis1 = Vector3.Cross(v6, v4).normalized;
-                Quaternion rotation = Quaternion.AngleAxis(angleDeg5 * -1, axis);
-                Quaternion rotation1 = Quaternion.AngleAxis(angleDeg6 * -1, axis1);
-                Vector3 newf = rotation * v2;
-                Vector3 newv = rotation1 * v4;
+               if ( angleDeg9 < 10)  { break; }
+
+                Vector3 axis = Vector3.Cross(v6, v4).normalized; // 旋转轴
+                Vector3 axis1 = Vector3.Cross(v6, v2).normalized;
+
+                Quaternion rotation = Quaternion.AngleAxis(angleDeg5 * -1f, axis);
+                Quaternion rotation1 = Quaternion.AngleAxis(angleDeg6*-1f, axis1);
+                Vector3 newf = (rotation * v4).normalized;
+                Vector3 newv = (rotation1 * v2).normalized;
                
                 var (t1_, t2_, deltaDeg, angleDeg_, angleDeg1_, evals, F1z, F2z) = RefineTausWithNM(t1_new, t2_new, points, r30, r45, a, newf.normalized, newv.normalized);
-                t1 = t1_;
-                t2 = t2_;
+          
                 f1 = F1z;
                 f2 = F2z;
                 this.f1z = f1;
                 this.f2z = f2;
+                t1 = t1_;
+                t2 = t2_;
                 angleDegodr = 0;
+            }
+        }
+        else
+        {
+            for (int i = 0; i < 100; i++)
+            {
+                float[][] probnew = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1, t2, a);
+                var (t1_new, t2_new, F1_new, F2_new) = RefineModuliByAxis(points, t_, t_, (f1 - f2).normalized, 50);
+
+                var (f_1new, f_2new) = FitFociByProbability(points, probnew[0], F1_new, F2_new, a);
+                f1 = f_1new;
+                f2 = f_2new;
+                t1 = t1_new;
+                t2 = t2_new;
+                float angleDeg5 = Vector3.Angle((f1-f2), (v2));
+                float angleDeg9 = Vector3.Angle((f1-f2), (v));
+                Debug.Log((angleDeg5, angleDeg9));
             }
         }
       
         Complex t1_1 = new Complex(0.323141198796178, 0.984532062400871);
         Complex t2_2 = new Complex(0.292181566064164, 1.00644754227822);
-        Vector3 vector = new Vector3(-0.38f, 0.19f, 0.91f);
 
-         
+        float[][] probnew_1 = DeviationCalculator.ComputeProbabilitiesFromTaus(r30, r45, t1_1, t2_2, a);
 
-
-       
-       
-
-
+        var (F1__, F2__) = ExtractFoci(points, probnew_1[1], probnew_1[3][1], probnew_1[2], probnew_1[3][2]);
+        Debug.Log($"[{string.Join(", ", probnew_1[0].Select(v => v.ToString("F6")))}]");
+        Debug.Log($"[{string.Join(", ", probs12[0].Select(v => v.ToString("F6")))}]");
+        Debug.Log($"[{string.Join(", ", probs012[0].Select(v => v.ToString("F6")))}]");
 
 
+        float fj1 = Mathf.Atan2(v2.z, v2.x) * Mathf.Rad2Deg;
+        float fj2 = Mathf.Atan2((F1__ - F2__).normalized.z, (F1__ - F2__).normalized.x) * Mathf.Rad2Deg;
+
+        Debug.Log((fj1, fj2));
+
+
+        Vector3 v3 = new Vector3(
+            Mathf.Sin(d2 * Mathf.Deg2Rad) * Mathf.Cos(fj1 * Mathf.Deg2Rad),
+            Mathf.Cos(d2 * Mathf.Deg2Rad),
+            Mathf.Sin(d2 * Mathf.Deg2Rad) * Mathf.Sin(fj1 * Mathf.Deg2Rad)
+        );
+        float angle12 = Vector3.Angle(v3, v);
+        float angle122 = Vector3.Angle(v2, v);
+
+        Debug.Log((angle12,angle122));
 
 
 
@@ -124,6 +240,38 @@ public class n2sjy2 : MonoBehaviour
 
 
     }
+    public static double AngleDistanceSquared(
+    double thetaPar, double theta30, double theta45,
+    Complex t30, Complex t45)
+    {
+        // 转回 [0,1) 归一化坐标
+        double aPar = thetaPar / (2 * Math.PI);
+        double b30 = theta30 / (2 * Math.PI);
+        double b45 = theta45 / (2 * Math.PI);
+
+        // 把共享相位分给两个分量
+        // a1 = aPar, a2 = aPar（假设对称）
+        double a1 = aPar;
+        double a2 = aPar;
+
+        // z1 = a1 + b30·t30
+        Complex z1 = new Complex(
+            a1 + b30 * t30.Real,
+            b30 * t30.Imaginary);
+
+        // z2 = a2 + b45·t45
+        Complex z2 = new Complex(
+            a2 + b45 * t45.Real,
+            b45 * t45.Imaginary);
+
+        return z1.Magnitude * z1.Magnitude
+             + z2.Magnitude * z2.Magnitude;
+    }
+
+
+
+
+
     /// <summary>
     /// 从当前 t1,t2 出发，使用 Nelder-Mead 直接最小化 |Δ|。
     /// 输入已预处理的数据，避免重复计算 rp, cone, a, r30, r45, v, d0。
@@ -182,42 +330,7 @@ public class n2sjy2 : MonoBehaviour
       
         return (t1Opt,t2Opt,(float)bestF, ad, ad1, evals,F1z,F2z);
     }
-    public static Vector3 pca(List<Vector3> points)
-    {
-        double[] r = new double[3];
-        int dim = 3;
-        var matrix = DenseMatrix.Create(points.Count, dim, (i, j) =>
-        {
-            Vector3 p = points[i];
-            if (j == 0) return p.x;
-            if (j == 1) return p.y;
-            return p.z;
-        });
-        var pca = new PCAScikitLearn();
-        pca.Fit(matrix, nComponents: 3);
-        r[0] = pca.ExplainedVarianceRatio[0];
-        r[1] = pca.ExplainedVarianceRatio[1];
-        r[2] = pca.ExplainedVarianceRatio[2];
-        Vector3 pc1 = new Vector3(
-    (float)pca.Components[0, 0],
-    (float)pca.Components[0, 1],
-    (float)pca.Components[0, 2]);
-        float absX = Mathf.Abs(pc1.x);
-        float absY = Mathf.Abs(pc1.y);
-        float absZ = Mathf.Abs(pc1.z);
-        float max = Mathf.Max(absX, absY, absZ);
-        float fj = Mathf.Atan2(pc1.z, pc1.x) * Mathf.Rad2Deg;
-        float d2 = Mathf.Acos(pc1.y) * Mathf.Rad2Deg;
-        Vector3 v3 = new Vector3(
-              Mathf.Sin(d2 * Mathf.Deg2Rad) * Mathf.Cos(fj * Mathf.Deg2Rad),
-              Mathf.Cos(d2 * Mathf.Deg2Rad),
-              Mathf.Sin(d2 * Mathf.Deg2Rad) * Mathf.Sin(fj * Mathf.Deg2Rad)
-          );
-        Debug.Log((fj, d2));
-        return v3;
-        
-
-    }
+ 
     public static float ComputeRp(List<Vector3> points)
     {
         if (points.Count == 0) return 0f;
@@ -239,14 +352,14 @@ public class n2sjy2 : MonoBehaviour
 
         Complex Kprime2 = Carlsonfk.K(Complex.Sqrt(1 - n1*n1)); // K(i√3)
 
-        Complex tau1 = Complex.ImaginaryOne * Kprime2 / K2;
+        Complex tau1 = Complex.ImaginaryOne * Kprime2 / K2;      // 模参数 tau = i*K'/K
 
 
         Complex Ksqrt2 = Carlsonfk.K(n2); // K(√2)
 
         Complex KprimeSqrt2 = Carlsonfk.K(Complex.Sqrt(1 - n2*n2)); // K(i)
 
-        Complex tau2 = Complex.ImaginaryOne * KprimeSqrt2 / Ksqrt2;
+        Complex tau2 = Complex.ImaginaryOne * KprimeSqrt2 / Ksqrt2;   // 模参数 tau = i*K'/K
 
         if (tau1.Imaginary < 0) tau1 = -tau1;
         if (tau2.Imaginary < 0) tau2 = -tau2;
@@ -469,9 +582,9 @@ public class n2sjy2 : MonoBehaviour
         float d0 = distances[0];
 
         // 构建线性系统 A * F = b
-        var A = Matrix<double>.Build.Dense(n - 1, 3);
-        var b = MathNet.Numerics.LinearAlgebra.Vector<double>.Build.Dense(n - 1);
 
+        var A = Matrix<double>.Build.Dense(n - 1, 3);
+        var b = MathNet.Numerics.LinearAlgebra.Vector<double>.Build.Dense(n - 1);  // System.Numerics.Vector<> 同名, 需全限定
         for (int i = 1; i < n; i++)
         {
             Vector3 diff = points[i] - p0;
@@ -529,20 +642,12 @@ public class n2sjy2 : MonoBehaviour
             if (dir.sqrMagnitude > 1e-12f)
             {
                 dir.Normalize();
-                if (Vector3.Dot(dir, axis) < 0) dir = -dir;   // 只约束“直线方向”，忽略 ±
+                if (Vector3.Dot(dir, axis) < 0) dir = -dir;
                 angleDeg = Vector3.Angle(dir, axis);
                 if (angleDegodr == 0)
                 {
                     angleDegodr = angleDeg;
                 }
-
-
-
-
-
-
-
-
             }
           
             Debug.Log($"[iter {iter}] cost={cost:E3} angle={angleDeg:F3}°  t1=({x[0]:F4},{x[1]:F4}) t2=({x[2]:F4},{x[3]:F4})");
@@ -954,5 +1059,114 @@ public static class NelderMead
     private static double Clamp(double v, double lo, double hi)
     {
         return v < lo ? lo : (v > hi ? hi : v);
+    }
+}
+public static class AbelianAngles
+{
+    // =========================================================
+    // 1. 在格 Λ(τ) = {m + n·τ} 中找离 z 最近的格点
+    // =========================================================
+    static Complex NearestLatticePoint(
+        Complex z, Complex tau,
+        int M = 30, int N = 30)
+    {
+        Complex best = Complex.Zero;
+        double bestDist = double.MaxValue;
+
+        for (int m = -M; m <= M; m++)
+        {
+            for (int n = -N; n <= N; n++)
+            {
+                Complex lambda = new Complex(m, 0)
+                               + new Complex(n, 0) * tau;
+                double d = (z - lambda).Magnitude;
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    best = lambda;
+                }
+            }
+        }
+        return best;
+    }
+
+    // =========================================================
+    // 2. 把 z 分解为 z = λ + w，λ ∈ Λ(τ)，w = a + b·τ
+    //    返回 (a, b)，均归一化到 [0, 1)
+    // =========================================================
+    public static (double a, double b) DecomposeOnLattice(
+        Complex z, Complex tau,
+        int M = 30, int N = 30)
+    {
+        Complex lambda = NearestLatticePoint(z, tau, M, N);
+        Complex w = z - lambda;
+
+        // w = a + b·τ
+        // 虚部: Im(w) = b·Im(τ)  → b = Im(w) / Im(τ)
+        // 实部: Re(w) = a + b·Re(τ) → a = Re(w) - b·Re(τ)
+        double b = w.Imaginary / tau.Imaginary;
+        double a = w.Real - b * tau.Real;
+
+        // 归一化到 [0, 1)
+        a = a - Math.Floor(a);
+        b = b - Math.Floor(b);
+
+        return (a, b);
+    }
+
+    // =========================================================
+    // 3. 从 (z30, z45) 和 (t30, t45) 提取三个角
+    // =========================================================
+    /// <summary>
+    /// θ∥  : 共享实轴方向的相位（a1、a2 的圆平均）
+    /// θ30 : E_{t30} 独有方向的相位（b1）
+    /// θ45 : E_{t45} 独有方向的相位（b2）
+    /// 三个角均在 [0, 2π)
+    /// </summary>
+    public static (double thetaPar, double theta30, double theta45) Extract(
+        Complex z30, Complex z45,
+        Complex t30, Complex t45,
+        int M = 30, int N = 30)
+    {
+        var (a1, b1) = DecomposeOnLattice(z30, t30, M, N);
+        var (a2, b2) = DecomposeOnLattice(z45, t45, M, N);
+
+        // 共享相位：用 sin/cos 做圆平均（正确处理 0/2π 环绕）
+        double phi1 = 2 * Math.PI * a1;
+        double phi2 = 2 * Math.PI * a2;
+        double cosSum = Math.Cos(phi1) + Math.Cos(phi2);
+        double sinSum = Math.Sin(phi1) + Math.Sin(phi2);
+        double thetaPar = Math.Atan2(sinSum, cosSum);
+        if (thetaPar < 0) thetaPar += 2 * Math.PI;
+
+        return (
+            thetaPar,
+            2 * Math.PI * b1,
+            2 * Math.PI * b2
+        );
+    }
+
+    // =========================================================
+    // 4. 批量计算：整组数据 → 三个角数组
+    // =========================================================
+    public static (double[] thetaPar, double[] theta30, double[] theta45)
+        ExtractAll(
+            Complex[] r30, Complex[] r45,
+            Complex t30, Complex t45,
+            int M = 30, int N = 30)
+    {
+        int n = r30.Length;
+        var tp = new double[n];
+        var t30a = new double[n];
+        var t45a = new double[n];
+
+        for (int i = 0; i < n; i++)
+        {
+            var (a, b, c) = Extract(r30[i], r45[i], t30, t45, M, N);
+            tp[i] = a;
+            t30a[i] = b;
+            t45a[i] = c;
+        }
+        return (tp, t30a, t45a);
     }
 }
