@@ -1,3 +1,63 @@
-﻿__pycache__/
+# ===============================================================
+#  Unity 工程根 .gitignore
+#  repo root = 工程根 "My project (2)"   (2025 迁移: 原根为 Assets/Scripts)
+# ===============================================================
+
+# ---- Unity 自动生成 / 缓存: 绝对不要提交 ----
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+/[Uu]serSettings/
+
+# Unity 崩溃报告
+sysinfo.txt
+crashlytics-build.properties
+
+# ---- Packages: 只跟踪 manifest / lock, 本地手装的包目录不提交 ----
+# (Packages/ 里是 179 MB 手装 NuGet 解包, 未被 manifest.json 引用)
+/Packages/*
+!/Packages/manifest.json
+!/Packages/packages-lock.json
+
+# ---- IDE / 编辑器 ----
+/.vs/
+/.idea/
+/.vscode/
+/.vsconfig
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.sln.DotSettings.user
+
+# ---- Python ----
+__pycache__/
 *.pyc
+*.pyo
 *.log
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 构建产物 ----
+*.apk
+*.aab
+*.app
+*.unitypackage
+ExportedObj/
