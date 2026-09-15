@@ -44,6 +44,10 @@ crashlytics-build.properties
 *.VC.db
 *.sln.DotSettings.user
 
+# ---- VS / NuGet 残留 (仅 IDE 生成, Unity 不需要) ----
+/app.config
+/packages.config
+
 # ---- Python ----
 __pycache__/
 *.pyc
