@@ -276,10 +276,14 @@ public class sjy
             float w2 = (float)Math.Sqrt(x2 * x2 - 1);
             double cAxis = Math.Abs(h1 * w2 - h1 * w1) / (2.0 * Math.PI);
             float vabc = (float)(Math.PI * cAxis * cAxis * c3);
-            float opi = (float)Math.Pow(c2 / Math.Sqrt((h1 * 0.5f) * (h1 * 0.5f) + (y * H) * (y * H)), 2);
-            double phi = Math.PI * 2f * vabc / Vc;
-            uvs[i] = new Vector2((float)(opi * Math.Cos(phi)),
-            (float)(opi * Math.Sin(phi)));
+            Vector3 e1 = Vector3.Cross(v3, Vector3.up).normalized;
+            Vector3 e2 = Vector3.Cross(v3, e1).normalized;
+            Vector3 d = points[i];
+            Vector3 perp = d - Vector3.Dot(d, v3) * v3;
+            float theta_i = Mathf.Atan2(Vector3.Dot(perp, e2), Vector3.Dot(perp, e1));
+
+            float rho = Mathf.Pow(c2 / rp, 1f / Mathf.Sin(theta2 * Mathf.Deg2Rad));
+            uvs[i] = new Vector2(rho * Mathf.Cos(theta_i), rho * Mathf.Sin(theta_i));
         }
         return uvs;
     }
